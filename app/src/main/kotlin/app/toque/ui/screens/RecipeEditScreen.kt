@@ -321,7 +321,7 @@ class RecipeEditScreen(a: MainActivity, start: Recipe, private val isNew: Boolea
             s.machine?.let { m ->
                 val ok = m.valid
                 chips.addView(Ui.chip(c, m.summary, if (ok) Icon.Kind.POT else Icon.Kind.WARNING,
-                    if (ok) Ui.ACCENT else Ui.WARN, if (ok) Ui.ACCENT_DIM else 0x33FFC14D, 15f))
+                    if (ok) Ui.ACCENT else Ui.WARN, if (ok) Ui.ACCENT_DIM else Ui.WARN_DIM, 15f))
             }
             if (chips.childCount > 0) col.addView(chips, Ui.lp(t = 6))
             col.background = Ui.pressable(Ui.round(0, 12f), 12f)

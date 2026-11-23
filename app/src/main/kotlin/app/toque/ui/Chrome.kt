@@ -45,7 +45,7 @@ class TopBar(private val a: MainActivity) : LinearLayout(a) {
     private val back = Icon(a, Icon.Kind.BACK, Ui.TEXT)
     private val titleView = Ui.ellipsize(Ui.text(a, "", 24f, Ui.TEXT, Ui.MEDIUM))
     private val temp = Ui.chip(a, "", Icon.Kind.THERMO, Ui.TEXT2)
-    private val lid = Ui.chip(a, tr("Couvercle ouvert"), Icon.Kind.LID, Ui.WARN, 0x33FFC14D)
+    private val lid = Ui.chip(a, tr("Couvercle ouvert"), Icon.Kind.LID, Ui.WARN, Ui.WARN_DIM)
     private val link = Ui.chip(a, "", Icon.Kind.LINK, Ui.TEXT2)
     private val clock = Ui.chip(a, "", Icon.Kind.CLOCK, Ui.TEXT)
     private val home = Icon(a, Icon.Kind.HOME, Ui.TEXT)
@@ -208,7 +208,7 @@ class MachineBar(private val a: MainActivity) : FrameLayout(a) {
         addView(jobRow, Ui.flp(Ui.MATCH, Ui.WRAP))
         // Alerte
         faultRow.setPadding(Ui.u(22), Ui.u(14), Ui.u(18), Ui.u(14))
-        faultRow.setBackgroundColor(0xFF3A1416.toInt())
+        faultRow.setBackgroundColor(Ui.FAULT_BG)
         faultRow.addView(Icon(a, Icon.Kind.WARNING, Ui.DANGER), LinearLayout.LayoutParams(Ui.u(34), Ui.u(34)).apply { rightMargin = Ui.u(14) })
         faultRow.addView(faultText, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
         faultRow.addView(Ui.button(a, tr("Acquitter"), Ui.Style.SECONDARY, Icon.Kind.CHECK, height = 60) {

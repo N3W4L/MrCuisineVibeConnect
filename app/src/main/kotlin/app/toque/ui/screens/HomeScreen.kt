@@ -7,9 +7,11 @@ import android.widget.TextView
 import app.toque.core.i18n.I18n
 import app.toque.core.i18n.tr
 import app.toque.core.recipes.UserRecipes
+import app.toque.ui.Dial
 import app.toque.ui.Icon
 import app.toque.ui.MainActivity
 import app.toque.ui.Screen
+import app.toque.ui.Theme
 import app.toque.ui.Ui
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -20,15 +22,17 @@ class HomeScreen(a: MainActivity) : Screen(a) {
     private lateinit var clock: TextView
     private lateinit var date: TextView
     private lateinit var greeting: TextView
-    private lateinit var recipesSub: TextView
-    private lateinit var favSub: TextView
-    private lateinit var settingsSub: TextView
+    private lateinit var dial: Dial
+    private lateinit var recipesItem: Dial.Item
+    private lateinit var favItem: Dial.Item
+    private lateinit var settingsItem: Dial.Item
     private lateinit var resumeCard: LinearLayout
     private lateinit var resumeText: TextView
     private lateinit var knobChip: LinearLayout
     private var unsub: (() -> Unit)? = null
     private val tick = object : Runnable {
         override fun run() {
+            a.switchAutoThemeIfDue()
             refreshClock()
             view.postDelayed(this, 10_000)
         }
@@ -47,7 +51,7 @@ class HomeScreen(a: MainActivity) : Screen(a) {
         left.addView(date, Ui.lp(t = 2))
 
         // Rappel tant que le bouton rotatif n'est ni réglé ni vu en marche.
-        knobChip = Ui.chip(c, tr("Bouton rotatif à régler"), Icon.Kind.WARNING, Ui.WARN, 0x33FFC14D, 18f)
+        knobChip = Ui.chip(c, tr("Bouton rotatif à régler"), Icon.Kind.WARNING, Ui.WARN, Ui.WARN_DIM, 18f)
         knobChip.isClickable = true
         knobChip.setOnClickListener { a.push(KnobSetupScreen(a)) }
         left.addView(knobChip, Ui.lp(Ui.WRAP, Ui.WRAP, t = 12))
@@ -93,62 +97,50 @@ class HomeScreen(a: MainActivity) : Screen(a) {
         left.addView(resumeCard, Ui.lp(Ui.MATCH, Ui.WRAP, t = 16))
         root.addView(left, LinearLayout.LayoutParams(0, Ui.MATCH, 0.42f).apply { rightMargin = Ui.u(28) })
 
-        val grid = Ui.vertical(c)
-        val row1 = Ui.horizontal(c)
-        val row2 = Ui.horizontal(c)
-        val (t1, s1) = tile(Icon.Kind.BOOK, tr("Recettes")) { a.push(RecipesScreen(a)) }
-        recipesSub = s1
-        row1.addView(t1, tileLp(true))
-        row1.addView(tile(Icon.Kind.POT, tr("Cuisson\nmanuelle"), hasSub = false) { a.push(ManualScreen(a)) }.first, tileLp(true))
-        row1.addView(tile(Icon.Kind.KNEAD, tr("Programmes"), tr("Pétrir, vapeur, rissoler, nettoyage")) { a.push(ProgramsScreen(a)) }.first, tileLp(false))
-        row2.addView(tile(Icon.Kind.SCALE, tr("Balance"), tr("Peser au gramme")) { a.push(ScaleScreen(a)) }.first, tileLp(true))
-        val (t5, s5) = tile(Icon.Kind.STAR, tr("Favoris")) { a.push(RecipesScreen(a, favorites = true)) }
-        favSub = s5
-        row2.addView(t5, tileLp(true))
-        // Sous-titre seulement quand une nouvelle version de Toque attend d'être installée.
-        val (t6, s6) = tile(Icon.Kind.SETTINGS, tr("Réglages")) { a.push(SettingsScreen(a)) }
-        settingsSub = s6
-        settingsSub.setTextColor(Ui.ACCENT)
-        row2.addView(t6, tileLp(false))
-        grid.addView(row1, LinearLayout.LayoutParams(Ui.MATCH, 0, 1f).apply { bottomMargin = Ui.u(16) })
-        grid.addView(row2, LinearLayout.LayoutParams(Ui.MATCH, 0, 1f))
-        root.addView(grid, LinearLayout.LayoutParams(0, Ui.MATCH, 0.58f))
+        // Cadran : un secteur par fonction, piloté par le bouton rotatif (onKnob) ou au doigt.
+        // Les couleurs du secteur choisi suivent la fonction quand le thème en donne (bento).
+        recipesItem = Dial.Item(Icon.Kind.BOOK, tr("Recettes")) { a.push(RecipesScreen(a)) }.also { it.colors = tileColors(0) }
+        favItem = Dial.Item(Icon.Kind.STAR, tr("Favoris")) { a.push(RecipesScreen(a, favorites = true)) }.also { it.colors = tileColors(4) }
+        val scale = Dial.Item(Icon.Kind.SCALE, tr("Balance")) { a.push(ScaleScreen(a)) }.also {
+            it.sub = tr("Peser au gramme"); it.colors = tileColors(3)
+        }
+        settingsItem = Dial.Item(Icon.Kind.SETTINGS, tr("Réglages")) { a.push(SettingsScreen(a)) }.also { it.colors = tileColors(5) }
+        val programs = Dial.Item(Icon.Kind.KNEAD, tr("Programmes")) { a.push(ProgramsScreen(a)) }.also {
+            it.sub = tr("Pétrir, vapeur, rissoler, nettoyage"); it.colors = tileColors(2)
+        }
+        val manual = Dial.Item(Icon.Kind.HAND, tr("Cuisson manuelle")) { a.push(ManualScreen(a)) }.also {
+            it.sub = tr("Durée, température, vitesse"); it.colors = tileColors(1)
+        }
+        dial = Dial(c)
+        dial.setItems(listOf(recipesItem, favItem, scale, settingsItem, programs, manual), tr("Tournez le bouton, appuyez pour ouvrir"))
+        root.addView(dial, LinearLayout.LayoutParams(0, Ui.MATCH, 0.58f))
         return root
     }
 
-    private fun tileLp(gap: Boolean) = LinearLayout.LayoutParams(0, Ui.MATCH, 1f).apply { if (gap) rightMargin = Ui.u(16) }
+    /** Fond et encre de la fonction [index] dans le thème en service (bento : une couleur par fonction), ou null. */
+    private fun tileColors(index: Int): Pair<Int, Int>? = Theme.p.tiles.getOrNull(index)
 
-    private fun tile(icon: Icon.Kind, title: String, sub: String = "", hasSub: Boolean = true, onClick: () -> Unit): Pair<LinearLayout, TextView> {
-        // Tuile centrée : grande pastille d'icône, titre et sous-titre dessous. La pastille est à la
-        // même hauteur dans toutes les tuiles, quel que soit le texte (une ou deux lignes, avec ou
-        // sans sous-titre) : espace fixe au-dessus, texte accroché sous la pastille.
-        val t = Ui.vertical(c, Gravity.CENTER_HORIZONTAL)
-        t.setPadding(Ui.u(14), Ui.u(14), Ui.u(14), Ui.u(14))
-        t.background = Ui.pressable(Ui.round(Ui.SURFACE, 26f, Ui.STROKE, 1f), 26f)
-        t.addView(View(c), LinearLayout.LayoutParams(1, 0, 2f))
-        val badge = android.widget.FrameLayout(c)
-        badge.background = Ui.round(Ui.ACCENT_DIM, 44f)
-        badge.addView(Icon(c, icon, Ui.ACCENT), Ui.flp(Ui.u(46), Ui.u(46), Gravity.CENTER))
-        t.addView(badge, LinearLayout.LayoutParams(Ui.u(84), Ui.u(84)))
-        val text = Ui.vertical(c, Gravity.CENTER_HORIZONTAL or Gravity.TOP)
-        text.addView(Ui.text(c, title, 22f, Ui.TEXT, Ui.MEDIUM).apply { gravity = Gravity.CENTER }, Ui.lp(Ui.WRAP, Ui.WRAP, t = 12))
-        val s = Ui.ellipsize(Ui.text(c, sub, 15f, Ui.TEXT2).apply { gravity = Gravity.CENTER }, 2)
-        if (hasSub) text.addView(s, Ui.lp(Ui.WRAP, Ui.WRAP, t = 4))
-        t.addView(text, LinearLayout.LayoutParams(Ui.MATCH, 0, 3f))
-        t.isClickable = true
-        t.setOnClickListener { onClick() }
-        return t to s
+    override fun onKnob(delta: Int): Boolean {
+        dial.rotate(delta)
+        return true
+    }
+
+    override fun onKnobPress(): Boolean {
+        dial.open()
+        return true
     }
 
     private fun refreshClock() {
         clock.text = MainActivity.now()
         date.text = SimpleDateFormat(tr("EEEE d MMMM"), I18n.locale).format(Date()).replaceFirstChar { it.uppercaseChar() }
         val h = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
-        greeting.text = when (h) {
+        val hello = when (h) {
             in 5..11 -> tr("Bonjour")
             in 12..17 -> tr("Bon après-midi")
             else -> tr("Bonsoir")
         }
+        val name = a.prefs.firstName
+        greeting.text = if (name.isEmpty()) hello else tr("%s, %s", hello, name)
     }
 
     private fun refresh() {
@@ -156,7 +148,7 @@ class HomeScreen(a: MainActivity) : Screen(a) {
         val n = repo.count
         val perso = repo.index.entries.count { UserRecipes.isUser(it.id) }
         val lidl = n - perso
-        recipesSub.text = when {
+        recipesItem.sub = when {
             !repo.loaded -> tr("Chargement…")
             n == 0 -> tr("Aucune recette Lidl pour l'instant")
             else -> listOfNotNull(
@@ -165,11 +157,12 @@ class HomeScreen(a: MainActivity) : Screen(a) {
             ).joinToString("\n")
         }
         val favs = repo.index.entries.count { it.favorite }
-        favSub.text = if (favs == 0) tr("Aucun favori") else if (favs == 1) tr("1 favori") else tr("%d favoris", favs)
+        favItem.sub = if (favs == 0) tr("Aucun favori") else if (favs == 1) tr("1 favori") else tr("%d favoris", favs)
         knobChip.visibility = if (a.prefs.knobReady) View.GONE else View.VISIBLE
         val update = a.updates.available
-        settingsSub.text = if (update != null) tr("Version %s disponible", update.version) else ""
-        settingsSub.visibility = if (update != null) View.VISIBLE else View.GONE
+        // Une nouvelle version de Toque attend d'être installée : le cadran le dit sous « Réglages ».
+        settingsItem.sub = if (update != null) tr("Version %s disponible", update.version) else tr("Écran, thème, langue")
+        dial.refresh()
         val guided = a.prefs.guidedRecipe
         val title = if (guided.isEmpty()) null else repo.index.entries.firstOrNull { it.id == guided }?.title
         resumeCard.visibility = if (title != null) View.VISIBLE else View.GONE

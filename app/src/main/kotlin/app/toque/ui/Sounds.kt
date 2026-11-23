@@ -48,25 +48,36 @@ object Sounds {
         play(phrase + phrase)
     }
 
-    private fun play(notes: List<Note>) {
-        player.execute {
-            val pcm = render(notes)
-            val track = try {
-                @Suppress("DEPRECATION")
-                AudioTrack(AudioManager.STREAM_MUSIC, RATE, AudioFormat.CHANNEL_OUT_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT, pcm.size * 2, AudioTrack.MODE_STATIC)
-            } catch (_: RuntimeException) {
-                return@execute
-            }
-            try {
-                track.write(pcm, 0, pcm.size)
-                track.play()
-                Thread.sleep(notes.sumOf { it.ms }.toLong() + 100)
-            } catch (_: Exception) {
-            } finally {
-                try { track.stop() } catch (_: IllegalStateException) {}
-                track.release()
-            }
+    private fun play(notes: List<Note>) = player.execute { playNow(render(notes)) }
+
+    /** Alertes : leur propre fil, pour ne jamais attendre la fin d'un son long (fin de recette…). */
+    private val urgent = Executors.newSingleThreadExecutor { r -> Thread(r, "toque-alerte").apply { isDaemon = true } }
+
+    /**
+     * Calcule puis joue un son (jeux de sons, voir SoundPacks). Le calcul se fait sur le fil des sons,
+     * jamais sur celui de l'interface : un son long peut demander un instant à la première écoute.
+     */
+    fun playLater(urgentSound: Boolean, render: () -> ShortArray?) =
+        (if (urgentSound) urgent else player).execute { render()?.let { playNow(it) } }
+
+    /** Fil des sons : à appeler depuis [player] seulement. */
+    private fun playNow(pcm: ShortArray) {
+        if (pcm.isEmpty()) return
+        val track = try {
+            @Suppress("DEPRECATION")
+            AudioTrack(AudioManager.STREAM_MUSIC, RATE, AudioFormat.CHANNEL_OUT_MONO,
+                AudioFormat.ENCODING_PCM_16BIT, pcm.size * 2, AudioTrack.MODE_STATIC)
+        } catch (_: RuntimeException) {
+            return
+        }
+        try {
+            track.write(pcm, 0, pcm.size)
+            track.play()
+            Thread.sleep(pcm.size * 1000L / RATE + 100)
+        } catch (_: Exception) {
+        } finally {
+            try { track.stop() } catch (_: IllegalStateException) {}
+            track.release()
         }
     }
 

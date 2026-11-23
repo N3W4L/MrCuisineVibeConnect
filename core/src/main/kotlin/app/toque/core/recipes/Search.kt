@@ -79,7 +79,17 @@ data class RecipeFilter(
  * pondéré (titre > catégorie/tags > ingrédients > étapes). Quelques millisecondes pour
  * des milliers de recettes, même sur la tablette d'origine.
  */
-class SearchIndex(recipes: List<Recipe>) {
+/**
+ * Index de recherche en mémoire. Se construit à partir des recettes (coûteux : tout le texte des
+ * étapes est découpé en mots), ou se relit d'un fichier écrit par [writeTo] (rapide) : l'appli le
+ * garde sur disque et ne le reconstruit que si les recettes ont changé.
+ */
+class SearchIndex private constructor(built: Built) {
+
+    /** Contenu de l'index, partagé tel quel entre un index et ses copies ([withFavorites]). */
+    private class Built(val entries: List<Entry>, val vocabulary: Array<String>, val postings: HashMap<String, HashMap<Int, Int>>)
+
+    constructor(recipes: List<Recipe>) : this(build(recipes))
 
     class Entry(
         val id: String,
@@ -96,43 +106,124 @@ class SearchIndex(recipes: List<Recipe>) {
         val ratingCount: Int = 0,
         /** Recette dans une autre langue que celle de l'interface (« de-DE ») ; vide sinon. */
         val language: String = "",
-    )
+    ) {
+        fun withFavorite(f: Boolean) = Entry(id, title, category, tags, f, source, totalMinutes, image, machineSteps,
+            normTitle, rating, ratingCount, language)
+    }
 
     data class Hit(val entry: Entry, val score: Double, val matched: Int)
 
-    val entries: List<Entry>
-    private val vocabulary: Array<String>
+    val entries: List<Entry> = built.entries
+    private val vocabulary: Array<String> = built.vocabulary
     /** terme -> (index d'entrée -> poids) */
-    private val postings: HashMap<String, HashMap<Int, Int>> = HashMap()
+    private val postings: HashMap<String, HashMap<Int, Int>> = built.postings
 
-    private companion object {
-        const val W_TITLE = 10
-        const val W_TAG = 5
-        const val W_INGREDIENT = 4
-        const val W_STEP = 1
-    }
+    companion object {
+        private const val W_TITLE = 10
+        private const val W_TAG = 5
+        private const val W_INGREDIENT = 4
+        private const val W_STEP = 1
+        /** Version du format de [writeTo] : un fichier d'une autre version est ignoré (et reconstruit). */
+        private const val FORMAT = 1
 
-    init {
-        val list = ArrayList<Entry>(recipes.size)
-        for ((index, r) in recipes.withIndex()) {
-            list += Entry(r.id, r.title, r.category, r.tags, r.favorite, r.source, r.totalMinutes, r.image,
-                r.machineSteps, TextNorm.normalize(r.title), r.rating, r.ratingCount, r.language)
-            fun add(text: String, w: Int) {
-                for (t in TextNorm.tokens(text)) {
-                    val p = postings.getOrPut(t) { HashMap(4) }
-                    val old = p[index] ?: 0
-                    if (w > old) p[index] = w
+        private fun build(recipes: List<Recipe>): Built {
+            val postings = HashMap<String, HashMap<Int, Int>>()
+            val list = ArrayList<Entry>(recipes.size)
+            for ((index, r) in recipes.withIndex()) {
+                list += Entry(r.id, r.title, r.category, r.tags, r.favorite, r.source, r.totalMinutes, r.image,
+                    r.machineSteps, TextNorm.normalize(r.title), r.rating, r.ratingCount, r.language)
+                fun add(text: String, w: Int) {
+                    for (t in TextNorm.tokens(text)) {
+                        val p = postings.getOrPut(t) { HashMap(4) }
+                        val old = p[index] ?: 0
+                        if (w > old) p[index] = w
+                    }
                 }
+                add(r.title, W_TITLE)
+                add(r.category, W_TAG)
+                for (t in r.tags) add(t, W_TAG)
+                for (i in r.allIngredients) add(i.name, W_INGREDIENT)
+                for (s in r.steps) add(s.text, W_STEP)
             }
-            add(r.title, W_TITLE)
-            add(r.category, W_TAG)
-            for (t in r.tags) add(t, W_TAG)
-            for (i in r.allIngredients) add(i.name, W_INGREDIENT)
-            for (s in r.steps) add(s.text, W_STEP)
+            return Built(list, postings.keys.toTypedArray().also { java.util.Arrays.sort(it) }, postings)
         }
-        entries = list
-        vocabulary = postings.keys.toTypedArray().also { java.util.Arrays.sort(it) }
+
+        /** Relit un index écrit par [writeTo] ; null si le format ne correspond pas (à reconstruire). */
+        fun readFrom(input: java.io.DataInputStream): SearchIndex? {
+            if (input.readInt() != FORMAT) return null
+            val n = input.readInt()
+            val entries = ArrayList<Entry>(n)
+            repeat(n) {
+                val id = input.readUTF()
+                val title = input.readUTF()
+                val category = input.readUTF()
+                val tags = List(input.readInt()) { input.readUTF() }
+                val favorite = input.readBoolean()
+                val source = RecipeSource.valueOf(input.readUTF())
+                val minutes = input.readInt()
+                val image = input.readUTF()
+                val machineSteps = input.readInt()
+                val normTitle = input.readUTF()
+                val rating = input.readDouble()
+                val ratingCount = input.readInt()
+                val language = input.readUTF()
+                entries += Entry(id, title, category, tags, favorite, source, minutes, image, machineSteps, normTitle,
+                    rating, ratingCount, language)
+            }
+            val terms = input.readInt()
+            val vocabulary = arrayOfNulls<String>(terms)
+            val postings = HashMap<String, HashMap<Int, Int>>(terms * 2)
+            for (k in 0 until terms) {
+                val term = input.readUTF()
+                vocabulary[k] = term
+                val size = input.readInt()
+                val p = HashMap<Int, Int>(size * 2)
+                repeat(size) { p[input.readInt()] = input.readByte().toInt() }
+                postings[term] = p
+            }
+            @Suppress("UNCHECKED_CAST")
+            return SearchIndex(Built(entries, vocabulary as Array<String>, postings))
+        }
     }
+
+    /** Écrit l'index (entrées et mots), pour le relire au prochain démarrage sans tout recalculer. */
+    fun writeTo(out: java.io.DataOutputStream) {
+        out.writeInt(FORMAT)
+        out.writeInt(entries.size)
+        for (e in entries) {
+            out.writeUTF(e.id)
+            out.writeUTF(e.title)
+            out.writeUTF(e.category)
+            out.writeInt(e.tags.size)
+            for (t in e.tags) out.writeUTF(t)
+            out.writeBoolean(e.favorite)
+            out.writeUTF(e.source.name)
+            out.writeInt(e.totalMinutes)
+            out.writeUTF(e.image)
+            out.writeInt(e.machineSteps)
+            out.writeUTF(e.normTitle)
+            out.writeDouble(e.rating)
+            out.writeInt(e.ratingCount)
+            out.writeUTF(e.language)
+        }
+        out.writeInt(vocabulary.size)
+        for (term in vocabulary) {
+            out.writeUTF(term)
+            val p = postings[term] ?: emptyMap<Int, Int>()
+            out.writeInt(p.size)
+            for ((doc, w) in p) {
+                out.writeInt(doc)
+                out.writeByte(w)
+            }
+        }
+    }
+
+    /**
+     * Le même index avec d'autres favoris : les mots ne sont pas recalculés (instantané). Sert quand
+     * on ajoute ou retire un favori, au lieu de tout reconstruire.
+     */
+    fun withFavorites(favorites: Set<String>): SearchIndex =
+        SearchIndex(Built(entries.map { e -> if (e.favorite == (e.id in favorites)) e else e.withFavorite(!e.favorite) }, vocabulary, postings))
 
     val categories: List<String> by lazy {
         entries.map { it.category }.filter { it.isNotBlank() }.distinct().sortedBy { TextNorm.normalize(it) }

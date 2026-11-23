@@ -18,27 +18,52 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 
-/** Thème sombre et utilitaires de mise en page, à l'échelle d'un écran de référence 1024×600. */
+/**
+ * Couleurs du thème en service (voir [Theme]) et utilitaires de mise en page, à l'échelle d'un écran
+ * de référence 1024×600. Les couleurs sont lues au moment où chaque vue est construite : changer de
+ * thème reconstruit l'interface (MainActivity.applyTheme).
+ */
 object Ui {
-    // Fond bleu nuit (dégradé, voir background()) et surfaces bleutées assorties.
-    const val BG = 0xFF0A1322.toInt()
-    const val SURFACE = 0xFF131D2E.toInt()
-    const val SURFACE2 = 0xFF1A2639.toInt()
-    const val SURFACE3 = 0xFF223048.toInt()
-    const val STROKE = 0xFF2A3A55.toInt()
-    const val TEXT = 0xFFF3F5F9.toInt()
-    const val TEXT2 = 0xFF9CA8BC.toInt()
-    const val TEXT3 = 0xFF66738A.toInt()
-    const val ACCENT = 0xFFFF8A3D.toInt()
-    const val ACCENT_DIM = 0x33FF8A3D
-    const val COOL = 0xFF5CC8FF.toInt()
-    const val OK = 0xFF3DDC97.toInt()
-    const val WARN = 0xFFFFC14D.toInt()
-    const val DANGER = 0xFFFF5A5F.toInt()
-    const val SCRIM = 0xCC000000.toInt()
+    private val p get() = Theme.p
+    val BG: Int get() = p.bg
+    val SURFACE: Int get() = p.surface
+    val SURFACE2: Int get() = p.surface2
+    val SURFACE3: Int get() = p.surface3
+    val STROKE: Int get() = p.stroke
+    val TEXT: Int get() = p.text
+    val TEXT2: Int get() = p.text2
+    val TEXT3: Int get() = p.text3
+    val ACCENT: Int get() = p.accent
+    val ACCENT_DIM: Int get() = dim(p.accent)
+    /** Texte et icônes posés sur ACCENT. */
+    val ON_ACCENT: Int get() = p.onAccent
+    /** Second accent du thème (étoiles, flammes). */
+    val SECOND: Int get() = p.second
+    val COOL: Int get() = p.cool
+    val ON_COOL: Int get() = p.onCool
+    val OK: Int get() = p.ok
+    val WARN: Int get() = p.warn
+    val WARN_DIM: Int get() = dim(p.warn)
+    val DANGER: Int get() = p.danger
+    val FAULT_BG: Int get() = p.faultBg
+    val SCRIM: Int get() = p.scrim
+    val LIGHT_THEME: Boolean get() = p.light
+    /** Appelé à chaque bouton touché (clic sonore, voir MainActivity.click). */
+    var onTap: (() -> Unit)? = null
+    /**
+     * Piste d'un anneau ou d'une jauge (partie non choisie). En clair, le texte du thème à faible
+     * opacité : visible sur n'importe quel fond, y compris les formes colorées du verre liquide.
+     */
+    val TRACK: Int get() = if (p.light) (p.text and 0x00FFFFFF) or 0x24000000 else p.surface3
 
+    /** Même couleur, opacité 20 % : fonds de pastilles et de badges. */
+    fun dim(color: Int): Int = (color and 0x00FFFFFF) or 0x33000000
+
+    private val SANS_THIN: Typeface = Typeface.create("sans-serif-thin", Typeface.NORMAL)
+    /** Texte courant léger (étapes de recette…) : toujours sans empattements, pour rester lisible. */
     val LIGHT: Typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
-    val THIN: Typeface = Typeface.create("sans-serif-thin", Typeface.NORMAL)
+    /** Grands chiffres (horloge, minuteur, jauges) : fine par défaut, ou à empattements (chaleureux). */
+    val THIN: Typeface get() = Theme.face(p.display, SANS_THIN)
     val REGULAR: Typeface = Typeface.create("sans-serif", Typeface.NORMAL)
     val MEDIUM: Typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
     val BOLD: Typeface = Typeface.create("sans-serif", Typeface.BOLD)
@@ -61,12 +86,12 @@ object Ui {
             // Le rayon avant la couleur : sous Android 6, setCornerRadius ne recalcule pas l'opacité.
             // Dans l'autre ordre, la forme se dit opaque sur tout son rectangle, et l'effet d'appui
             // dont elle est le masque (voir pressable) éclaire un carré au lieu du bouton arrondi.
-            setCornerRadius(uf(radius))
+            setCornerRadius(uf(radius * p.corners))
             setColor(color)
             if (strokeWidth > 0) setStroke(u(strokeWidth), strokeColor)
         }
 
-    fun pressable(base: Drawable, radius: Float, ripple: Int = 0x33FFFFFF): Drawable =
+    fun pressable(base: Drawable, radius: Float, ripple: Int = p.ripple): Drawable =
         RippleDrawable(ColorStateList.valueOf(ripple), base, round(Color.WHITE, radius))
 
     fun text(c: Context, s: CharSequence = "", size: Float = 18f, color: Int = TEXT, face: Typeface = REGULAR): TextView =
@@ -81,10 +106,13 @@ object Ui {
     /** Texte d'une seule ligne, rapetissé de [size] jusqu'à [min] pour tenir dans sa largeur (jamais de retour à la ligne). */
     fun fitText(c: Context, size: Float, min: Float, color: Int = TEXT, face: Typeface = REGULAR): TextView =
         object : TextView(c) {
+            // Pinceau de mesure gardé d'une mise en page à l'autre (rien d'alloué pendant la mesure).
+            private val probe = android.graphics.Paint()
+
             override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
                 val avail = View.MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight
                 if (View.MeasureSpec.getMode(widthMeasureSpec) != View.MeasureSpec.UNSPECIFIED && avail > 0) {
-                    val p = android.graphics.Paint(paint)
+                    val p = probe.apply { set(paint) }
                     var px = uf(size)
                     p.textSize = px
                     val s = text.toString()
@@ -164,11 +192,11 @@ object Ui {
     fun button(c: Context, label: String, style: Style = Style.SECONDARY, icon: Icon.Kind? = null,
                height: Int = 64, textSize: Float = 20f, onClick: (View) -> Unit): LinearLayout {
         val (bg, fg) = when (style) {
-            Style.PRIMARY -> ACCENT to 0xFF1A0E05.toInt()
+            Style.PRIMARY -> ACCENT to ON_ACCENT
             Style.SECONDARY -> SURFACE3 to TEXT
             Style.DANGER -> DANGER to Color.WHITE
             Style.GHOST -> Color.TRANSPARENT to TEXT2
-            Style.COOL -> COOL to 0xFF04131C.toInt()
+            Style.COOL -> COOL to ON_COOL
         }
         val row = horizontal(c, Gravity.CENTER)
         row.minimumHeight = u(height)
@@ -183,7 +211,7 @@ object Ui {
         if (label.isNotEmpty()) row.addView(text(c, label, textSize, fg, MEDIUM))
         row.isClickable = true
         row.isFocusable = true
-        row.setOnClickListener { onClick(it) }
+        row.setOnClickListener { onTap?.invoke(); onClick(it) }
         return row
     }
 
@@ -206,12 +234,41 @@ object Ui {
 
     /** Puce sélectionnable (filtres, choix). */
     fun toggleChip(c: Context, label: String, selected: Boolean, onClick: () -> Unit): TextView {
-        val t = text(c, label, 17f, if (selected) 0xFF1A0E05.toInt() else TEXT, MEDIUM)
+        val t = text(c, label, 17f, if (selected) ON_ACCENT else TEXT, MEDIUM)
         t.setPadding(u(18), u(10), u(18), u(10))
         t.background = pressable(if (selected) round(ACCENT, 40f) else round(SURFACE2, 40f, STROKE, 1f), 40f)
         t.isClickable = true
         t.setOnClickListener { onClick() }
         return t
+    }
+
+    /** Une option d'un [segmented]. */
+    class Seg(val key: String, val label: String, val icon: Icon.Kind? = null)
+
+    /**
+     * Choix exclusif en grand, sur toute la largeur : chaque option occupe une moitié (ou un tiers)
+     * de la barre, ce qui fait des cibles larges et hautes, faciles à toucher avec des doigts mouillés.
+     * L'option choisie est pleine (accent), les autres restent dans le rail.
+     */
+    fun segmented(c: Context, options: List<Seg>, selected: String, height: Int = 64, onPick: (String) -> Unit): LinearLayout {
+        val box = horizontal(c)
+        val inset = 5
+        box.setPadding(u(inset), u(inset), u(inset), u(inset))
+        box.background = round(SURFACE, height / 2f, STROKE, 1f)
+        val r = (height - 2 * inset) / 2f
+        for ((i, o) in options.withIndex()) {
+            val on = o.key == selected
+            val fg = if (on) ON_ACCENT else TEXT
+            val cell = horizontal(c, Gravity.CENTER)
+            cell.background = pressable(round(if (on) ACCENT else Color.TRANSPARENT, r), r)
+            if (o.icon != null) cell.addView(Icon(c, o.icon, fg), LinearLayout.LayoutParams(u(30), u(30)).apply { rightMargin = u(10) })
+            cell.addView(text(c, o.label, 19f, fg, MEDIUM))
+            cell.contentDescription = o.label
+            cell.isClickable = true
+            cell.setOnClickListener { onTap?.invoke(); onPick(o.key) }
+            box.addView(cell, LinearLayout.LayoutParams(0, MATCH, 1f).apply { if (i > 0) leftMargin = u(inset) })
+        }
+        return box
     }
 
     fun card(c: Context, radius: Float = 24f, color: Int = SURFACE): LinearLayout = vertical(c).apply {
@@ -231,10 +288,13 @@ object Ui {
         else -> "${seconds / 60} min ${seconds % 60} s"
     }
 
-    /** Couleur liée à une température : froid -> bleu, tiède -> orange, chaud -> rouge. */
+    /**
+     * Couleur liée à une température : froid -> bleu, tiède -> jaune, chaud -> orange, très chaud -> rouge.
+     * L'orange est fixe : l'accent du thème (vert citron du bento, bleu du verre) ne dit pas « chaud ».
+     */
     fun tempColor(c: Int): Int = when {
         c >= 90 -> DANGER
-        c >= 60 -> ACCENT
+        c >= 60 -> if (LIGHT_THEME) 0xFFD2601C.toInt() else 0xFFFF8A3D.toInt()
         c >= 40 -> WARN
         else -> COOL
     }
@@ -256,9 +316,38 @@ object Ui {
         return words.take(2).joinToString("") { it.first().uppercaseChar().toString() }.ifEmpty { title.take(1).uppercase() }
     }
 
-    /** Fond de l'appli : dégradé bleu nuit en diagonale, plus clair en haut à gauche. */
-    fun background(): GradientDrawable =
-        GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xFF16294A.toInt(), 0xFF0D1A31.toInt(), 0xFF070E1B.toInt()))
+    /**
+     * Fond de l'appli : dégradé en diagonale du thème, plus clair en haut à gauche. Le verre liquide y
+     * ajoute deux grandes formes colorées, que ses surfaces translucides laissent deviner.
+     */
+    fun background(): Drawable {
+        val base = GradientDrawable(GradientDrawable.Orientation.TL_BR, p.gradient)
+        val blobs = p.blobs ?: return base
+        return object : Drawable() {
+            // Rien n'est alloué pendant le dessin : deux ovales pleins, calculés quand la taille change.
+            private val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+            private val oval1 = android.graphics.RectF()
+            private val oval2 = android.graphics.RectF()
+            override fun onBoundsChange(b: android.graphics.Rect) {
+                base.bounds = b
+                val w = b.width().toFloat()
+                val h = b.height().toFloat()
+                oval1.set(b.left - 0.10f * w, b.top - 0.25f * h, b.left + 0.45f * w, b.top + 0.70f * h)
+                oval2.set(b.left + 0.58f * w, b.top + 0.45f * h, b.left + 1.08f * w, b.top + 1.30f * h)
+            }
+            override fun draw(canvas: android.graphics.Canvas) {
+                base.draw(canvas)
+                paint.color = blobs[0]
+                canvas.drawOval(oval1, paint)
+                paint.color = blobs[1]
+                canvas.drawOval(oval2, paint)
+            }
+            override fun setAlpha(alpha: Int) {}
+            override fun setColorFilter(cf: android.graphics.ColorFilter?) {}
+            @Suppress("OVERRIDE_DEPRECATION")
+            override fun getOpacity(): Int = android.graphics.PixelFormat.OPAQUE
+        }
+    }
 
     fun gradient(colors: IntArray, radius: Float): GradientDrawable =
         GradientDrawable(GradientDrawable.Orientation.TL_BR, colors).apply { setCornerRadius(uf(radius)) }

@@ -16,11 +16,11 @@ import app.toque.core.machine.SafetyPolicy
 import app.toque.core.machine.Snapshot
 import app.toque.core.protocol.Direction
 import app.toque.core.protocol.Mcc
+import app.toque.ui.Gauge
 import app.toque.ui.HoldButton
 import app.toque.ui.Icon
 import app.toque.ui.MainActivity
 import app.toque.ui.Screen
-import app.toque.ui.TempRing
 import app.toque.ui.Ui
 import app.toque.ui.ValueCard
 
@@ -47,17 +47,29 @@ class ManualScreen(
     private var accessory = preset?.accessory ?: Accessory.BLADE
     private var selected = 0
 
-    private lateinit var timeCard: ValueCard
-    private lateinit var tempCard: ValueCard
-    private lateinit var speedCard: ValueCard
+    /** Les deux réglages qui ne sont pas au centre, en petits cercles à gauche (dans l'ordre Durée, Température, Vitesse). */
+    private lateinit var satellites: List<Gauge>
+    private val satLabels = ArrayList<TextView>()
     private lateinit var dirRow: LinearLayout
     private lateinit var accRow: LinearLayout
-    private lateinit var ring: TempRing
+    private lateinit var gauge: Gauge
+    private lateinit var noticeBox: LinearLayout
+    private lateinit var noticeIcon: Icon
+    private lateinit var noticeText: TextView
+    private val hideNotice = Runnable {
+        transient = false
+        if (hintText.isNotEmpty()) showNotice(hintText, hintText == tr("Réglages appliqués en direct"))
+        else noticeBox.animate().alpha(0f).setDuration(220).withEndAction { noticeBox.visibility = View.INVISIBLE }
+    }
     private lateinit var weight: TextView
     private lateinit var startBtn: LinearLayout
-    private lateinit var hint: TextView
+    /** Message permanent (limite, cuisson en direct) : affiché dans la carte au-dessus du cadran. */
+    private var hintText = ""
+    private var transient = false
     private lateinit var turbo: HoldButton
     private var live = false
+    /** État des barres Sens / Accessoire déjà affiché (voir refresh). */
+    private var lastBars = ""
     private var wasLive = false
     private var pendingEdit = false
     private var timeEdited = false
@@ -67,53 +79,161 @@ class ManualScreen(
     private var ownTargetUntil = 0L
 
     override fun build(): View {
+        // Trois colonnes, dans l'ordre où on s'en sert :
+        //  - à gauche, les deux réglages qui ne sont pas en cours, en petits cercles : les toucher les
+        //    fait passer au centre ;
+        //  - au centre, le grand cadran du réglage en cours, avec − / + posés dans son ouverture, juste
+        //    sous la valeur qu'ils changent, et la raison d'une limite de sécurité en dessous ;
+        //  - à droite, les options (sens, accessoire) puis les actions, Démarrer en bas à droite.
+        // Le bouton rotatif règle le grand cadran ; son appui démarre ou met en pause.
         val root = Ui.horizontal(c, Gravity.TOP)
         root.setPadding(Ui.u(24), Ui.u(8), Ui.u(24), Ui.u(20))
-        val left = Ui.vertical(c)
-        val cards = Ui.horizontal(c)
-        timeCard = ValueCard(c, tr("Durée"), Icon.Kind.CLOCK)
-        tempCard = ValueCard(c, tr("Température"), Icon.Kind.THERMO)
-        speedCard = ValueCard(c, tr("Vitesse"), Icon.Kind.SPEED)
-        val all = listOf(timeCard, tempCard, speedCard)
-        for ((i, card) in all.withIndex()) {
-            card.onSelect = { selected = i; refresh() }
-            card.onMinus = { change(i, -1) }
-            card.onPlus = { change(i, 1) }
-            cards.addView(card, LinearLayout.LayoutParams(0, Ui.MATCH, 1f).apply { if (i < 2) rightMargin = Ui.u(14) })
-        }
-        left.addView(cards, LinearLayout.LayoutParams(Ui.MATCH, 0, 1f))
 
-        val options = Ui.horizontal(c)
+        val left = Ui.vertical(c)
+        val sats = ArrayList<Gauge>()
+        satLabels.clear()
+        for (k in 0..1) {
+            val card = Ui.vertical(c, Gravity.CENTER_HORIZONTAL)
+            card.background = Ui.pressable(Ui.round(Ui.SURFACE, 24f, Ui.STROKE, 1f), 24f)
+            card.setPadding(Ui.u(8), Ui.u(10), Ui.u(8), Ui.u(10))
+            val g = Gauge(c).apply { compact = true }
+            card.addView(g, LinearLayout.LayoutParams(Ui.MATCH, 0, 1f))
+            // Nom du réglage en bas de la carte, hors du cercle, pour l'écrire en grand.
+            val label = Ui.text(c, "", 19f, Ui.TEXT2, Ui.MEDIUM).apply { gravity = Gravity.CENTER }
+            card.addView(label, Ui.lp(Ui.MATCH, Ui.WRAP, t = 4))
+            satLabels += label
+            card.isClickable = true
+            card.setOnClickListener { selected = otherParams()[k]; refresh() }
+            sats += g
+            left.addView(card, LinearLayout.LayoutParams(Ui.MATCH, 0, 1f).apply { if (k == 0) bottomMargin = Ui.u(14) })
+        }
+        satellites = sats
+        root.addView(left, LinearLayout.LayoutParams(0, Ui.MATCH, 0.22f).apply { rightMargin = Ui.u(18) })
+
+        val center = Ui.vertical(c, Gravity.CENTER_HORIZONTAL)
+        // Messages (limites de sécurité, tare) : une carte au-dessus du cadran, dans l'espace libre,
+        // au lieu d'un message flottant qui cacherait − / +. La place reste réservée : rien ne bouge.
+        noticeBox = Ui.horizontal(c, Gravity.CENTER_VERTICAL)
+        noticeBox.setPadding(Ui.u(18), 0, Ui.u(22), 0)
+        noticeBox.background = Ui.round(Ui.SURFACE2, 28f, Ui.ACCENT, 2f)
+        noticeIcon = Icon(c, Icon.Kind.WARNING, Ui.WARN)
+        noticeBox.addView(noticeIcon, LinearLayout.LayoutParams(Ui.u(26), Ui.u(26)).apply { rightMargin = Ui.u(12) })
+        noticeText = Ui.ellipsize(Ui.text(c, "", 18f, Ui.TEXT, Ui.MEDIUM), 2)
+        noticeBox.addView(noticeText)
+        noticeBox.visibility = View.INVISIBLE
+        center.addView(noticeBox, Ui.lp(Ui.WRAP, Ui.u(56), t = 2, b = 4))
+        val dial = android.widget.FrameLayout(c)
+        gauge = Gauge(c)
+        // Le cercle s'arrête au-dessus de la rangée − / + : ni l'arc ni ses graduations ne la touchent.
+        dial.addView(gauge, Ui.flp().apply { bottomMargin = Ui.u(86) })
+        val minus = Ui.button(c, "", Ui.Style.SECONDARY, Icon.Kind.MINUS, height = 80) { change(selected, -1) }
+        val plus = Ui.button(c, "", Ui.Style.SECONDARY, Icon.Kind.PLUS, height = 80) { change(selected, 1) }
+        // Répétition à l'appui long, sauf vitesse et température pendant une cuisson (comme avant).
+        ValueCard.repeatOnHold(minus, { !live || selected == 0 }) { change(selected, -1) }
+        ValueCard.repeatOnHold(plus, { !live || selected == 0 }) { change(selected, 1) }
+        // Dans l'ouverture du cadran, de part et d'autre de son axe.
+        dial.addView(minus, android.widget.FrameLayout.LayoutParams(Ui.u(80), Ui.u(80), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { rightMargin = Ui.u(110) })
+        dial.addView(plus, android.widget.FrameLayout.LayoutParams(Ui.u(80), Ui.u(80), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { leftMargin = Ui.u(110) })
+        center.addView(dial, LinearLayout.LayoutParams(Ui.MATCH, 0, 1f))
+        root.addView(center, LinearLayout.LayoutParams(0, Ui.MATCH, 0.46f).apply { rightMargin = Ui.u(18) })
+
+        val right = Ui.vertical(c)
+        right.addView(Ui.text(c, tr("Sens"), 15f, Ui.TEXT2), Ui.lp(t = 4))
         dirRow = Ui.horizontal(c)
+        right.addView(dirRow, Ui.lp(Ui.MATCH, Ui.u(64), t = 6))
+        right.addView(Ui.text(c, tr("Accessoire"), 15f, Ui.TEXT2), Ui.lp(t = 14))
         accRow = Ui.horizontal(c)
-        options.addView(dirRow)
-        options.addView(Ui.spacer(c, w = 18))
-        options.addView(accRow)
-        options.addView(Ui.spacer(c, weight = 1f), LinearLayout.LayoutParams(0, 1, 1f))
+        right.addView(accRow, Ui.lp(Ui.MATCH, Ui.u(64), t = 6))
+        right.addView(Ui.spacer(c, weight = 1f), LinearLayout.LayoutParams(1, 0, 1f))
+        // Balance : le poids reste visible sans quitter la cuisson manuelle, et toucher la carte tare
+        // (remise à zéro), sans passer par l'écran Balance. « Tare » à droite le dit.
+        val scaleRow = Ui.horizontal(c, Gravity.CENTER_VERTICAL)
+        scaleRow.setPadding(Ui.u(18), 0, Ui.u(18), 0)
+        scaleRow.background = Ui.pressable(Ui.round(Ui.SURFACE, 20f, Ui.STROKE, 1f), 20f)
+        scaleRow.addView(Icon(c, Icon.Kind.SCALE, Ui.TEXT2), LinearLayout.LayoutParams(Ui.u(26), Ui.u(26)).apply { rightMargin = Ui.u(12) })
+        weight = Ui.text(c, "", 20f, Ui.TEXT, Ui.MEDIUM)
+        scaleRow.addView(weight, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
+        scaleRow.addView(Ui.text(c, tr("Tare"), 17f, Ui.ACCENT, Ui.MEDIUM))
+        scaleRow.isClickable = true
+        scaleRow.contentDescription = tr("Tare")
+        scaleRow.setOnClickListener {
+            a.machine.tare()
+            notice(tr("Balance remise à zéro"), info = true)
+        }
+        right.addView(scaleRow, Ui.lp(Ui.MATCH, Ui.u(60), b = 14))
         turbo = HoldButton(c, "Turbo", onDown = {
             a.machine.turboDown(accessory) { v -> if (!v.ok) a.refusal(v) }
         }, onUp = { a.machine.turboUp() })
-        options.addView(turbo, Ui.lp(Ui.WRAP, Ui.u(64)))
+        right.addView(turbo, Ui.lp(Ui.MATCH, Ui.u(72)))
         if (onPick != null) turbo.visibility = View.GONE
-        left.addView(options, Ui.lp(Ui.MATCH, Ui.WRAP, t = 16))
-        root.addView(left, LinearLayout.LayoutParams(0, Ui.MATCH, 1f).apply { rightMargin = Ui.u(20) })
-
-        val right = Ui.vertical(c, Gravity.CENTER_HORIZONTAL)
-        right.background = Ui.round(Ui.SURFACE, 26f)
-        right.setPadding(Ui.u(18), Ui.u(14), Ui.u(18), Ui.u(18))
-        ring = TempRing(c)
-        right.addView(ring, LinearLayout.LayoutParams(Ui.MATCH, 0, 1f))
-        weight = Ui.text(c, "", 18f, Ui.TEXT2)
-        right.addView(weight, Ui.lp(Ui.WRAP, Ui.WRAP, t = 2))
-        hint = Ui.text(c, "", 16f, Ui.WARN).apply { gravity = Gravity.CENTER }
-        right.addView(hint, Ui.lp(Ui.MATCH, Ui.WRAP, t = 8))
-        startBtn = if (onPick != null) Ui.button(c, tr("Utiliser ce réglage"), Ui.Style.PRIMARY, Icon.Kind.CHECK, height = 80, textSize = 22f) { start() }
-        else Ui.button(c, tr("Démarrer"), Ui.Style.PRIMARY, Icon.Kind.PLAY, height = 80, textSize = 24f) { start() }
-        right.addView(startBtn, Ui.lp(Ui.MATCH, Ui.WRAP, t = 12))
-        root.addView(right, LinearLayout.LayoutParams(Ui.u(300), Ui.MATCH))
+        startBtn = if (onPick != null) Ui.button(c, tr("Utiliser ce réglage"), Ui.Style.PRIMARY, Icon.Kind.CHECK, height = 88, textSize = 22f) { start() }
+        else Ui.button(c, tr("Démarrer"), Ui.Style.PRIMARY, Icon.Kind.PLAY, height = 88, textSize = 24f) { start() }
+        right.addView(startBtn, Ui.lp(Ui.MATCH, Ui.u(88), t = 12))
+        root.addView(right, LinearLayout.LayoutParams(0, Ui.MATCH, 0.32f))
         refresh()
         return root
     }
+
+    /** Affiche [message] dans la carte au-dessus du cadran pendant quelques secondes. */
+    private fun notice(message: String, info: Boolean = false) {
+        transient = true
+        showNotice(message, info)
+        noticeBox.removeCallbacks(hideNotice)
+        noticeBox.postDelayed(hideNotice, 2_800)
+    }
+
+    /** Message permanent ; vide = rien. Un message passager reste prioritaire jusqu'à sa fin. */
+    private fun setHint(text: String) {
+        if (text == hintText) return
+        hintText = text
+        if (transient) return
+        if (text.isNotEmpty()) showNotice(text, text == tr("Réglages appliqués en direct"))
+        else {
+            noticeBox.animate().cancel()
+            noticeBox.visibility = View.INVISIBLE
+        }
+    }
+
+    private fun showNotice(message: String, info: Boolean) {
+        noticeText.text = message
+        noticeIcon.set(if (info) Icon.Kind.CHECK else Icon.Kind.WARNING)
+        noticeIcon.color = if (info) Ui.OK else Ui.WARN
+        noticeBox.animate().cancel()
+        noticeBox.alpha = 1f
+        noticeBox.visibility = View.VISIBLE
+    }
+
+    /** Les deux réglages qui ne sont pas au centre, dans l'ordre Durée (0), Température (1), Vitesse (2). */
+    private fun otherParams(): IntArray = (0..2).filter { it != selected }.toIntArray()
+
+    private fun paramName(i: Int): String = when (i) {
+        0 -> tr("Durée")
+        1 -> tr("Température")
+        else -> tr("Vitesse")
+    }
+
+    /** Vitesse maximale permise par les réglages en cours, et la raison à afficher. */
+    private fun speedLimit(): Pair<Int, String> {
+        var max = 10
+        var why = trKey("Vitesse %d maximum")
+        if (tempLevel > 0) { max = Limits.MAX_SPEED_HEATED; why = trKey("En chauffe, vitesse %d maximum") }
+        if (reverse && max > Limits.MAX_SPEED_REVERSE) { max = Limits.MAX_SPEED_REVERSE; why = trKey("En sens inverse, vitesse %d maximum") }
+        if (accessory.maxSpeed < max) { max = accessory.maxSpeed; why = trKey("Avec le fouet, vitesse %d maximum") }
+        return max to why
+    }
+
+    /** En chauffe, la vitesse descend jusqu'à 0 : la lame reste à l'arrêt. */
+    private val minSpeed: Int get() = if (tempLevel > 0) 0 else 1
+
+    private fun speedName(v: Int): String = when (v) {
+        0 -> tr("Sans mélange")
+        1 -> tr("Mijoter")
+        2, 3 -> tr("Mélanger")
+        in 4..6 -> tr("Hacher")
+        else -> tr("Mixer")
+    } + if (reverse && v > 0) " · " + tr("inverse") else ""
+
+    private fun tempName(t: Int): String = if (t >= 100) tr("Ébullition") else if (t >= 60) tr("Cuisson") else tr("Tiédir")
 
     private val tempSteps: IntArray get() = intArrayOf(0) + (1..19).toList().toIntArray()
 
@@ -136,25 +256,20 @@ class ManualScreen(
                 tempLevel = tempSteps[(i + dir).coerceIn(0, tempSteps.size - 1)]
                 if (tempLevel > 0 && speed > Limits.MAX_SPEED_HEATED) {
                     speed = Limits.MAX_SPEED_HEATED
-                    a.toast(tr("En chauffe, vitesse %d maximum", Limits.MAX_SPEED_HEATED))
+                    notice(tr("En chauffe, vitesse %d maximum", Limits.MAX_SPEED_HEATED))
                 }
                 if (tempLevel == 0 && speed == 0) {
                     speed = 1
-                    a.toast(tr("Sans chauffe, vitesse 1 minimum"))
+                    notice(tr("Sans chauffe, vitesse 1 minimum"))
                 }
                 capNoStirTemperature()
             }
             2 -> {
-                var max = 10
-                var why = trKey("Vitesse %d maximum")
-                if (tempLevel > 0) { max = Limits.MAX_SPEED_HEATED; why = trKey("En chauffe, vitesse %d maximum") }
-                if (reverse && max > Limits.MAX_SPEED_REVERSE) { max = Limits.MAX_SPEED_REVERSE; why = trKey("En sens inverse, vitesse %d maximum") }
-                if (accessory.maxSpeed < max) { max = accessory.maxSpeed; why = trKey("Avec le fouet, vitesse %d maximum") }
-                // En chauffe, la vitesse descend jusqu'à 0 : la lame reste à l'arrêt.
-                val min = if (tempLevel > 0) 0 else 1
+                val (max, why) = speedLimit()
+                val min = minSpeed
                 val next = (speed + dir).coerceIn(min, 10)
-                if (dir < 0 && speed == min && min == 1) a.toast(tr("Sans chauffe, vitesse 1 minimum"))
-                if (next > max) a.toast(tr(why, max)) else speed = next
+                if (dir < 0 && speed == min && min == 1) notice(tr("Sans chauffe, vitesse 1 minimum"))
+                if (next > max) notice(tr(why, max)) else speed = next
                 capNoStirTemperature()
             }
         }
@@ -178,7 +293,7 @@ class ManualScreen(
     private fun capNoStirTemperature() {
         if (speed == 0 && tempLevel > Limits.MAX_TEMP_LEVEL_NO_STIR) {
             tempLevel = Limits.MAX_TEMP_LEVEL_NO_STIR
-            a.toast(tr("Sans mélange, %d °C maximum", Mcc.celsiusForLevel(tempLevel)))
+            notice(tr("Sans mélange, %d °C maximum", Mcc.celsiusForLevel(tempLevel)))
         }
     }
 
@@ -186,7 +301,7 @@ class ManualScreen(
         if (speed == 0) return // sans mélange, pas de sens de rotation
         if (r && speed > Limits.MAX_SPEED_REVERSE) {
             speed = Limits.MAX_SPEED_REVERSE
-            a.toast(tr("En sens inverse, vitesse %d maximum", Limits.MAX_SPEED_REVERSE))
+            notice(tr("En sens inverse, vitesse %d maximum", Limits.MAX_SPEED_REVERSE))
         }
         reverse = r
         refresh()
@@ -198,7 +313,7 @@ class ManualScreen(
         accessory = acc
         if (speed > acc.maxSpeed) {
             speed = acc.maxSpeed
-            a.toast(tr("%s : vitesse %d maximum", acc.label, acc.maxSpeed))
+            notice(tr("%s : vitesse %d maximum", acc.label, acc.maxSpeed))
         }
         refresh()
     }
@@ -241,65 +356,108 @@ class ManualScreen(
     }
 
     private fun refresh() {
-        val maxS = if (speed > 6) "max 15 min" else "max 99 min"
-        timeCard.set(Ui.clock(seconds * 1000L), "", maxS)
-        if (tempLevel == 0) tempCard.set("—", "", tr("Sans chauffe"), Ui.TEXT2)
-        else {
-            val t = Mcc.celsiusForLevel(tempLevel)
-            tempCard.set("$t", "°C", if (t >= 100) tr("Ébullition") else if (t >= 60) tr("Cuisson") else tr("Tiédir"), Ui.tempColor(t))
+        // Barres Sens et Accessoire reconstruites seulement quand leur état change (pas à chaque
+        // cran de molette) : moins de mises en page, plus fluide sur la tablette du robot.
+        val barsKey = "$reverse|$accessory|${speed == 0}|$live"
+        if (barsKey != lastBars) {
+            lastBars = barsKey
+            dirRow.removeAllViews()
+            // Sans mélange, la lame ne tourne pas : le sens ne s'applique pas (grisé, setReverse l'ignore).
+            dirRow.alpha = if (speed == 0) 0.35f else 1f
+            dirRow.addView(Ui.segmented(c, listOf(
+                Ui.Seg("normal", tr("Normal"), Icon.Kind.FORWARD),
+                Ui.Seg("reverse", tr("Inverse"), Icon.Kind.REVERSE),
+            ), if (reverse) "reverse" else "normal") { k -> setReverse(k == "reverse") }, LinearLayout.LayoutParams(0, Ui.MATCH, 1f))
+            accRow.removeAllViews()
+            // L'accessoire ne change pas pendant une cuisson (setAccessory l'ignore) : grisé.
+            accRow.alpha = if (live) 0.35f else 1f
+            accRow.addView(Ui.segmented(c, listOf(
+                Ui.Seg(Accessory.BLADE.name, Accessory.BLADE.label, Icon.Kind.BLADE),
+                Ui.Seg(Accessory.WHISK.name, Accessory.WHISK.label, Icon.Kind.WHISK),
+            ), accessory.name) { k -> setAccessory(Accessory.valueOf(k)) }, LinearLayout.LayoutParams(0, Ui.MATCH, 1f))
         }
-        speedCard.set("$speed", "", when (speed) {
-            0 -> tr("Sans mélange")
-            1 -> tr("Mijoter")
-            2, 3 -> tr("Mélanger")
-            in 4..6 -> tr("Hacher")
-            else -> tr("Mixer")
-        } + if (reverse && speed > 0) " · " + tr("inverse") else "")
-        timeCard.select(selected == 0)
-        tempCard.select(selected == 1)
-        speedCard.select(selected == 2)
-
-        dirRow.removeAllViews()
-        dirRow.alpha = if (speed == 0) 0.35f else 1f
-        dirRow.addView(Ui.toggleChip(c, tr("Sens normal"), !reverse) { setReverse(false) }, Ui.lp(Ui.WRAP, Ui.WRAP, r = 8))
-        dirRow.addView(Ui.toggleChip(c, tr("Inverse"), reverse) { setReverse(true) })
-        accRow.removeAllViews()
-        accRow.addView(Ui.toggleChip(c, Accessory.BLADE.label, accessory == Accessory.BLADE) { setAccessory(Accessory.BLADE) }, Ui.lp(Ui.WRAP, Ui.WRAP, r = 8))
-        accRow.addView(Ui.toggleChip(c, Accessory.WHISK.label, accessory == Accessory.WHISK) { setAccessory(Accessory.WHISK) })
 
         // Pour une étape de recette, le bol d'aujourd'hui ne compte pas.
         val bowl = if (onPick == null && a.snapshot.hasSample) a.snapshot.actualTempC else null
         val v = SafetyPolicy.checkJob(spec(), bowl).filter { it.code != SafetyPolicy.HOT_BLEND }
-        hint.text = v.firstOrNull()?.message ?: if (onPick == null && a.snapshot.hot && speed >= 4) tr("Contenu chaud : confirmation demandée") else idleHint()
+        setHint(v.firstOrNull()?.message ?: if (onPick == null && a.snapshot.hot && speed >= 4) tr("Contenu chaud : confirmation demandée") else idleHint())
         Ui.setButtonEnabled(startBtn, v.isEmpty())
-        showRing(a.snapshot)
+        showGauge(a.snapshot)
     }
 
     /**
-     * Anneau : température mesurée et repère de consigne. Le repère suit la carte Température dès
-     * l'appui, sans attendre la prochaine trame de la base (jusqu'à une seconde au repos) ; en
-     * cuisson, il revient à la consigne du programme une fois le réglage appliqué.
+     * Jauge du réglage choisi, avec la plage permise par la sécurité. Pour la température, le repère
+     * suit le réglage dès l'appui, sans attendre la prochaine trame de la base (jusqu'à une seconde au
+     * repos) ; en cuisson, il revient à la consigne du programme une fois le réglage appliqué. L'arc
+     * intérieur montre la mesure réelle : température du bol, ou vitesse de la lame en marche.
      */
-    private fun showRing(s: Snapshot) {
-        val editing = pendingEdit || SystemClock.uptimeMillis() < ownTargetUntil
-        val level = if (s.jobActive && s.jobTempLevel > 0 && !editing) s.jobTempLevel else tempLevel
-        ring.set(if (s.hasSample) s.actualTempC else 0, if (level > 0) Mcc.celsiusForLevel(level) else 0, s.speedLevel)
+    private fun showGauge(s: Snapshot) {
+        show(gauge, selected, s, small = false)
+        otherParams().forEachIndexed { k, i ->
+            show(satellites[k], i, s, small = true)
+            satLabels[k].text = paramName(i)
+        }
+    }
+
+    /**
+     * Remplit une jauge avec le réglage [param]. En petit (satellite), pas de graduations, et le nom
+     * du réglage sous la valeur ; en grand, les graduations et le détail (« Ébullition », « restant »…).
+     */
+    private fun show(g: Gauge, param: Int, s: Snapshot, small: Boolean) {
+        when (param) {
+            0 -> {
+                val full = (Limits.MAX_MS_DEFAULT / 1000).toFloat()
+                val maxS = ((if (speed > 6) Limits.MAX_MS_HIGH_SPEED else Limits.MAX_MS_DEFAULT) / 1000).toFloat()
+                // Échelle en racine carrée : les premières minutes, les plus réglées, prennent de la place.
+                fun f(sec: Float) = Math.sqrt((sec / full).toDouble()).toFloat()
+                g.set(f(seconds.toFloat()), 0f, f(maxS), Ui.ACCENT, Ui.clock(seconds * 1000L), "",
+                    if (small) "" else if (live) tr("restant") else if (speed > 6) tr("15 min maximum au-delà de la vitesse 6") else tr("99 min maximum"),
+                    if (small) emptyList() else listOf(f(60f) to "1", f(600f) to "10", f(1800f) to "30", 1f to "99 min"))
+            }
+            1 -> {
+                val editing = pendingEdit || SystemClock.uptimeMillis() < ownTargetUntil
+                val level = if (s.jobActive && s.jobTempLevel > 0 && !editing) s.jobTempLevel else tempLevel
+                val t = Mcc.celsiusForLevel(level)
+                val okTo = if (speed == 0) Limits.MAX_TEMP_LEVEL_NO_STIR / 19f else 1f
+                val ticks = listOf(37, 60, 100, 130).map { v -> Mcc.TEMPERATURE_LEVELS.indexOf(v) / 19f to "$v" }
+                g.set(level / 19f, 0f, okTo, if (level == 0) Ui.TEXT3 else Ui.tempColor(t),
+                    if (level == 0) "—" else "$t", if (level == 0) "" else "°C",
+                    if (small) "" else if (level == 0) tr("Sans chauffe") else tempName(t),
+                    if (small) emptyList() else ticks,
+                    if (s.hasSample) levelFraction(s.actualTempC) else null, Ui.tempColor(if (s.hasSample) s.actualTempC else 0))
+            }
+            else -> {
+                val (max, _) = speedLimit()
+                g.set(speed / 10f, minSpeed / 10f, max / 10f, Ui.ACCENT, "$speed", "",
+                    if (small) "" else speedName(speed),
+                    if (small) emptyList() else (0..10).map { it / 10f to "$it" },
+                    if (s.jobActive && s.hasSample) s.speedLevel / 10f else null, Ui.COOL)
+            }
+        }
+    }
+
+    /** Position d'une température mesurée sur l'échelle des niveaux (interpolée entre deux niveaux). */
+    private fun levelFraction(celsius: Int): Float {
+        val t = Mcc.TEMPERATURE_LEVELS
+        if (celsius <= 0) return 0f
+        if (celsius < t[1]) return celsius.toFloat() / t[1] / 19f
+        for (i in 1 until t.size - 1) {
+            if (celsius < t[i + 1]) return (i + (celsius - t[i]).toFloat() / (t[i + 1] - t[i])) / 19f
+        }
+        return 1f
     }
 
     override fun onSnapshot(s: Snapshot) {
-        showRing(s)
         weight.text = if (s.hasSample) tr("Balance : %d g", s.weightG) else tr("Base non connectée")
         if (onPick != null) return
         val manualJob = s.kind?.name == "MANUAL" && (s.state == JobState.RUNNING || s.state == JobState.STARTING || s.state == JobState.PAUSED)
         live = manualJob && s.state != JobState.PAUSED
-        tempCard.repeatEnabled = !live
-        speedCard.repeatEnabled = !live
+        accRow.alpha = if (live) 0.35f else 1f
         if (live && !pendingEdit) {
             // Pendant la cuisson, la carte Durée affiche le temps restant.
             val remaining = ((s.remainingMs + 999) / 1000).toInt().coerceAtLeast(1)
             if (remaining != seconds) {
                 seconds = remaining
-                timeCard.set(Ui.clock(seconds * 1000L), "", tr("restant"))
             }
         }
         if (wasLive && !live && !manualJob) {
@@ -308,18 +466,19 @@ class ManualScreen(
         }
         wasLive = live
         val busy = s.busy
-        startBtn.visibility = if (busy && s.state != JobState.PAUSED) View.GONE else View.VISIBLE
+        startBtn.visibility = if (busy && s.state != JobState.PAUSED) View.INVISIBLE else View.VISIBLE
         (startBtn.getChildAt(1) as TextView).text = if (s.state == JobState.PAUSED && manualJob) tr("Reprendre") else tr("Démarrer")
         turbo.isEnabled = !busy || s.turboActive
         turbo.alpha = if (turbo.isEnabled) 1f else 0.35f
-        if (live) hint.text = tr("Réglages appliqués en direct")
+        if (live) setHint(tr("Réglages appliqués en direct"))
         else if (!busy) refreshHintOnly()
+        showGauge(s)
     }
 
     private fun refreshHintOnly() {
         val v = SafetyPolicy.checkJob(spec(), if (a.snapshot.hasSample) a.snapshot.actualTempC else null)
             .filter { it.code != SafetyPolicy.HOT_BLEND }
-        hint.text = v.firstOrNull()?.message ?: if (a.snapshot.hot && speed >= 4) tr("Contenu chaud : confirmation demandée") else idleHint()
+        setHint(v.firstOrNull()?.message ?: if (a.snapshot.hot && speed >= 4) tr("Contenu chaud : confirmation demandée") else idleHint())
     }
 
     /** Rappel affiché quand rien ne s'oppose au démarrage : sans mélange, rien ne décolle le fond du bol. */

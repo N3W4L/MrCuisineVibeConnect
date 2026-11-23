@@ -4,14 +4,20 @@ import app.toque.core.json.Json
 import app.toque.core.recipes.OriginalDbMapper
 import app.toque.core.recipes.Recipe
 import app.toque.core.recipes.RecipeCodec
+import app.toque.core.recipes.RecipeFilter
 import app.toque.core.recipes.RecipeSource
 import app.toque.core.recipes.SearchIndex
 import app.toque.core.recipes.StepProgram
 import app.toque.core.recipes.TextNorm
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.DataInputStream
+import java.io.DataOutputStream
 
 class RecipesTest {
     /** Jeu de recettes de test (données d'essai uniquement, jamais livrées dans l'appli). */
@@ -118,5 +124,38 @@ class RecipesTest {
         assertTrue(r.steps.all { it.machine == null || it.needsReview })
         assertEquals("500 g carottes", r.allIngredients.single().display)
         assertEquals(1700000000000L, res.maxUpdated)
+    }
+
+    /** L'index relu du disque (cache de l'appli) répond exactement comme celui construit des recettes. */
+    @Test fun searchIndexSurvivesDiskRoundTrip() {
+        val idx = SearchIndex(builtin())
+        val bytes = ByteArrayOutputStream().also { idx.writeTo(DataOutputStream(it)) }.toByteArray()
+        val back = SearchIndex.readFrom(DataInputStream(ByteArrayInputStream(bytes)))
+        assertNotNull(back)
+        back!!
+        fun Hit(list: List<SearchIndex.Hit>) = list.map { "${it.entry.id}:${it.score}:${it.matched}" }
+        assertEquals(idx.entries.map { listOf(it.id, it.title, it.category, it.tags, it.favorite, it.source, it.totalMinutes, it.image,
+            it.machineSteps, it.normTitle, it.rating, it.ratingCount, it.language) },
+            back.entries.map { listOf(it.id, it.title, it.category, it.tags, it.favorite, it.source, it.totalMinutes, it.image,
+                it.machineSteps, it.normTitle, it.rating, it.ratingCount, it.language) })
+        for (q in listOf("", "poulet", "risoto", "bechamle", "gateau chocolat", "soupe", "pate"))
+            assertEquals(q, Hit(idx.search(q)), Hit(back.search(q)))
+        assertEquals(Hit(idx.withIngredients(listOf("oeuf", "farine"))), Hit(back.withIngredients(listOf("oeuf", "farine"))))
+        assertEquals(idx.categories, back.categories)
+    }
+
+    @Test fun searchIndexFileOfAnotherFormatIsIgnored() {
+        assertNull(SearchIndex.readFrom(DataInputStream(ByteArrayInputStream(byteArrayOf(0, 0, 0, 99)))))
+    }
+
+    /** Ajouter un favori ne reconstruit pas l'index : seules les entrées concernées changent. */
+    @Test fun favoritesChangeWithoutRebuilding() {
+        val idx = SearchIndex(builtin())
+        val id = idx.entries[1].id
+        val fav = idx.withFavorites(setOf(id))
+        assertEquals(listOf(id), fav.entries.filter { it.favorite }.map { it.id })
+        assertEquals(listOf(id), fav.search("", RecipeFilter(favoritesOnly = true)).map { it.entry.id })
+        assertEquals(idx.search("poulet").map { it.entry.id }.toSet(), fav.search("poulet").map { it.entry.id }.toSet())
+        assertTrue(fav.withFavorites(emptySet()).entries.none { it.favorite })
     }
 }

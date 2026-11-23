@@ -12,7 +12,8 @@ class Icon(context: Context, var kind: Kind, color: Int) : View(context) {
     enum class Kind {
         BACK, SEARCH, PLAY, PAUSE, STOP, THERMO, SPEED, CLOCK, REVERSE, SCALE, BOOK, STAR, STAR_FILLED,
         SETTINGS, PLUS, MINUS, CHECK, CLOSE, KNEAD, STEAM, FLAME, BOLT, SYNC, LID, WARNING, HOME, WHISK,
-        CHEVRON, LINK, INFO, POT, TIMER, DROP, EDIT, TRASH, PEOPLE, DOWNLOAD, UPLOAD, GLOBE, BELL,
+        CHEVRON, LINK, INFO, POT, TIMER, DROP, EDIT, TRASH, PEOPLE, DOWNLOAD, UPLOAD, GLOBE, BELL, HAND,
+        FORWARD, BLADE,
     }
 
     var color: Int = color
@@ -74,9 +75,23 @@ class Icon(context: Context, var kind: Kind, color: Int) : View(context) {
                 canvas.drawCircle(12f, 13f, 8.5f, stroke); canvas.drawLine(12f, 13f, 12f, 8.5f, stroke); canvas.drawLine(12f, 13f, 15f, 15f, stroke)
                 if (kind == Kind.TIMER) canvas.drawLine(10f, 2.5f, 14f, 2.5f, stroke)
             }
+            // Sens normal : cercle presque fermé, ouvert en haut à droite, et pointe tangente au
+            // cercle au bout de l'arc, dirigée dans le sens des aiguilles d'une montre.
+            Kind.FORWARD -> drawTurnArrow(canvas, p)
+            // Sens inverse : la même flèche en miroir.
             Kind.REVERSE -> {
-                rect.set(4f, 4f, 20f, 20f); canvas.drawArc(rect, -60f, -260f, false, stroke)
-                p.moveTo(17f, 3f); p.lineTo(16.5f, 6.8f); p.lineTo(20.5f, 7f); canvas.drawPath(p, stroke)
+                canvas.save(); canvas.scale(-1f, 1f, 12f, 12f)
+                drawTurnArrow(canvas, p)
+                canvas.restore()
+            }
+            // Lame vue de dessus : moyeu et quatre pales courbes.
+            Kind.BLADE -> {
+                canvas.drawCircle(12f, 12f, 2.2f, stroke)
+                for (k in 0 until 4) {
+                    canvas.save(); canvas.rotate(90f * k, 12f, 12f)
+                    p.reset(); p.moveTo(12f, 9.8f); p.cubicTo(11f, 7f, 12.5f, 4f, 16f, 3f); canvas.drawPath(p, stroke)
+                    canvas.restore()
+                }
             }
             Kind.SCALE -> {
                 rect.set(3f, 7f, 21f, 20f); canvas.drawRoundRect(rect, 3f, 3f, stroke)
@@ -149,10 +164,17 @@ class Icon(context: Context, var kind: Kind, color: Int) : View(context) {
                 p.moveTo(10f, 19.5f); p.lineTo(10f, 14.2f); p.lineTo(14f, 14.2f); p.lineTo(14f, 19.5f)
                 canvas.drawPath(p, stroke)
             }
+            // Fouet de cuisine, incliné comme on le dessine d'habitude : manche, et trois fils (deux
+            // boucles en goutte d'eau et un fil central) qui se rejoignent au manche.
             Kind.WHISK -> {
-                canvas.drawLine(12f, 21.5f, 12f, 15f, stroke)
-                rect.set(7f, 2.5f, 17f, 16f); canvas.drawOval(rect, stroke)
-                rect.set(9.5f, 2.5f, 14.5f, 16f); canvas.drawOval(rect, stroke)
+                canvas.save(); canvas.rotate(35f, 12f, 12f)
+                rect.set(10.7f, 16.5f, 13.3f, 23f); canvas.drawRoundRect(rect, 1.3f, 1.3f, stroke)
+                p.moveTo(12f, 16.5f); p.cubicTo(3.5f, 13f, 4.5f, 1.5f, 12f, 1.5f); p.cubicTo(19.5f, 1.5f, 20.5f, 13f, 12f, 16.5f)
+                canvas.drawPath(p, stroke)
+                p.reset(); p.moveTo(12f, 16.5f); p.cubicTo(7.8f, 12.5f, 8.5f, 1.8f, 12f, 1.5f); p.cubicTo(15.5f, 1.8f, 16.2f, 12.5f, 12f, 16.5f)
+                canvas.drawPath(p, stroke)
+                canvas.drawLine(12f, 16.5f, 12f, 1.5f, stroke)
+                canvas.restore()
             }
             Kind.LINK -> { canvas.drawCircle(12f, 12f, 4f, fill); canvas.drawCircle(12f, 12f, 8.5f, stroke) }
             Kind.INFO -> { canvas.drawCircle(12f, 12f, 9f, stroke); canvas.drawLine(12f, 11f, 12f, 16.5f, stroke); canvas.drawCircle(12f, 7.8f, 1.2f, fill) }
@@ -194,7 +216,51 @@ class Icon(context: Context, var kind: Kind, color: Int) : View(context) {
                 canvas.drawLine(2f, 11f, 4f, 11f, stroke); canvas.drawLine(20f, 11f, 22f, 11f, stroke)
                 canvas.drawLine(7f, 6f, 17f, 6f, stroke); canvas.drawLine(12f, 3.5f, 12f, 6f, stroke)
             }
+            // Main ouverte (cuisson manuelle : « je règle moi-même ») : quatre doigts, paume et pouce.
+            Kind.HAND -> {
+                canvas.drawLine(8.5f, 13f, 8.5f, 6.5f, stroke)
+                canvas.drawLine(11.5f, 11.5f, 11.5f, 4.5f, stroke)
+                canvas.drawLine(14.5f, 11.5f, 14.5f, 5f, stroke)
+                canvas.drawLine(17.5f, 12f, 17.5f, 7.5f, stroke)
+                p.moveTo(17.5f, 11.5f); p.lineTo(17.5f, 15f)
+                p.cubicTo(17.5f, 19f, 15f, 21.5f, 12f, 21.5f)
+                p.cubicTo(9.5f, 21.5f, 8f, 20.5f, 6.8f, 18.8f)
+                p.lineTo(3.8f, 14.2f)
+                p.cubicTo(3.2f, 13.2f, 3.9f, 12f, 5f, 12.2f)
+                p.cubicTo(5.8f, 12.3f, 6.6f, 13f, 8.5f, 15f)
+                canvas.drawPath(p, stroke)
+            }
         }
         canvas.restore()
+    }
+
+    /**
+     * Flèche de rotation dans le sens des aiguilles d'une montre : arc de 275° (rayon 6,4) bien ouvert
+     * à droite, terminé par une grande pointe triangulaire pleine posée sur la fin de l'arc et dirigée
+     * le long du cercle. Proportions vérifiées à 26-30 px : la pointe reste lisible et ne touche pas
+     * le début de l'arc.
+     */
+    private fun drawTurnArrow(canvas: Canvas, p: android.graphics.Path) {
+        val cx = 12f
+        val cy = 12.2f
+        val r = 6.4f
+        val end = -58f                       // fin de l'arc, en haut à droite
+        val sweep = 275f
+        rect.set(cx - r, cy - r, cx + r, cy + r)
+        canvas.drawArc(rect, end - sweep, sweep, false, stroke)
+        val a = Math.toRadians(end.toDouble())
+        val px = cx + r * Math.cos(a).toFloat()
+        val py = cy + r * Math.sin(a).toFloat()
+        // t : sens du parcours (horaire à l'écran) ; n : vers l'extérieur du cercle.
+        val tx = -Math.sin(a).toFloat()
+        val ty = Math.cos(a).toFloat()
+        val nx = Math.cos(a).toFloat()
+        val ny = Math.sin(a).toFloat()
+        p.reset()
+        p.moveTo(px + tx * 5.2f, py + ty * 5.2f)
+        p.lineTo(px + nx * 4.2f - tx * 0.2f, py + ny * 4.2f - ty * 0.2f)
+        p.lineTo(px - nx * 4.2f - tx * 0.2f, py - ny * 4.2f - ty * 0.2f)
+        p.close()
+        canvas.drawPath(p, fill)
     }
 }

@@ -69,6 +69,12 @@ class MainActivity : Activity() {
         app = ToqueApp.of(this)
         val dm = resources.displayMetrics
         Ui.init(dm.widthPixels, dm.heightPixels)
+        // Avant toute vue : chacune lit les couleurs du thème au moment où elle est construite.
+        Theme.select(prefs.theme, prefs.themeMode)
+        Ui.onTap = { click() }
+        // Sons du jeu choisi calculés en tâche de fond, une fois l'écran affiché (le calcul ne doit pas
+        // ralentir le démarrage) : le premier son joue ensuite sans attente.
+        window.decorView.postDelayed({ SoundPacks.warmUp(pack) }, 6_000)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         window.setBackgroundDrawable(Ui.background())
 
@@ -113,6 +119,24 @@ class MainActivity : Activity() {
     fun applyLanguage() {
         I18n.select(I18n.resolve(prefs.language, Locale.getDefault().language).code)
         reopenSettings = true
+        recreate()
+    }
+
+    /**
+     * Applique le thème choisi dans les réglages : comme pour la langue, l'interface est reconstruite
+     * et on revient aux réglages. Le pilotage tourne dans son propre processus : rien ne s'y arrête.
+     */
+    fun applyTheme() {
+        reopenSettings = true
+        recreate()
+    }
+
+    /**
+     * Mode automatique : passe de clair à sombre (ou l'inverse) quand l'heure franchit la limite.
+     * Appelé depuis l'accueil seulement, et jamais pendant un programme ou une fenêtre ouverte.
+     */
+    fun switchAutoThemeIfDue() {
+        if (!Theme.autoSwitchDue() || snapshot.busy || overlayShown || asleep) return
         recreate()
     }
 
@@ -262,9 +286,9 @@ class MainActivity : Activity() {
             val s = current
             if ((left || right || press) && !prefs.knobSetupDone) prefs.knobSetupDone = true
             if (s != null && currentFocus !is android.widget.EditText) {
-                if (left && s.onKnob(-1)) return true
-                if (right && s.onKnob(1)) return true
-                if (press && s.onKnobPress()) return true
+                if (left && s.onKnob(-1)) { click(); return true }
+                if (right && s.onKnob(1)) { click(); return true }
+                if (press && s.onKnobPress()) { click(); return true }
             }
         }
         return super.dispatchKeyEvent(event)
@@ -279,7 +303,7 @@ class MainActivity : Activity() {
             if (v != 0f && now - lastKnobMs > 40) {
                 lastKnobMs = now
                 if (!prefs.knobSetupDone) prefs.knobSetupDone = true
-                if (current?.onKnob(if (v > 0) 1 else -1) == true) return true
+                if (current?.onKnob(if (v > 0) 1 else -1) == true) { click(); return true }
             }
         }
         return super.dispatchGenericMotionEvent(event)
@@ -292,6 +316,7 @@ class MainActivity : Activity() {
         current?.onEvent(e)
         if (e.type != EventType.LINK_CHANGED && e.type != EventType.PHASE_CHANGED) standby.poke()
         when (e.type) {
+            EventType.JOB_STARTED -> if (prefs.sound) SoundPacks.play(pack, SoundPacks.Event.START)
             EventType.JOB_FINISHED -> if (!ownSound) chime(2)
             EventType.FAULT -> { chime(3); toast(e.message, Ui.DANGER) }
             EventType.LID_OPENED -> if (snapshot.busy || snapshot.state != null) toast(tr("Couvercle ouvert : pause"), Ui.WARN)
@@ -303,16 +328,31 @@ class MainActivity : Activity() {
 
     /** Quantité à peser atteinte. */
     fun weighBeep() {
-        if (prefs.sound) Sounds.weighReached(prefs.weighSound)
+        if (!prefs.sound) return
+        if (pack == SoundPacks.Pack.CLASSIC) Sounds.weighReached(prefs.weighSound) else SoundPacks.play(pack, SoundPacks.Event.WEIGH)
+    }
+
+    /** Jeu de sons choisi dans Réglages › Sons. */
+    val pack: SoundPacks.Pack get() = SoundPacks.Pack.of(prefs.soundPack)
+
+    /** Clic de la molette et des boutons, s'il est activé. */
+    fun click() {
+        if (prefs.sound && prefs.clickSound) SoundPacks.play(pack, SoundPacks.Event.CLICK)
     }
 
     /** Fin de recette : mélodie forte, comme l'appli d'origine. */
     fun recipeDoneSound() {
-        if (prefs.sound) Sounds.recipeDone()
+        if (!prefs.sound) return
+        if (pack == SoundPacks.Pack.CLASSIC) Sounds.recipeDone() else SoundPacks.play(pack, SoundPacks.Event.RECIPE_DONE)
     }
 
+    /** Fin de programme (1-2 coups) ou alerte (3) : bips d'Android en Classique, son du jeu sinon. */
     fun chime(times: Int = 1) {
         if (!prefs.sound) return
+        if (pack != SoundPacks.Pack.CLASSIC) {
+            SoundPacks.play(pack, if (times >= 3) SoundPacks.Event.ALERT else SoundPacks.Event.PROGRAM_DONE)
+            return
+        }
         val t = tone ?: return
         for (i in 0 until times) main.postDelayed({
             try {

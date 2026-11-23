@@ -3,68 +3,79 @@ package app.toque.ui.screens
 import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
-import android.widget.TextView
 import app.toque.Prefs
 import app.toque.core.i18n.tr
 import app.toque.core.machine.Snapshot
+import app.toque.ui.Gauge
 import app.toque.ui.Icon
 import app.toque.ui.MainActivity
 import app.toque.ui.Screen
 import app.toque.ui.Ui
 
-/** Balance intégrée : grand affichage, tare au doigt ou par appui sur le bouton rotatif. */
+/**
+ * Balance intégrée : un grand cadran (le même que la pesée des recettes) qui se remplit jusqu'à la
+ * capacité de la balance, l'état de la mesure, et la tare au doigt ou par appui sur le bouton rotatif.
+ */
 class ScaleScreen(a: MainActivity) : Screen(a) {
     override val title = tr("Balance")
     override val keepAwake: Boolean get() = true
-    private lateinit var value: TextView
+    private lateinit var gauge: Gauge
     private lateinit var state: LinearLayout
     private var simulated = 0
 
     override fun build(): View {
-        val root = Ui.vertical(c, Gravity.CENTER_HORIZONTAL)
-        root.setPadding(Ui.u(24), Ui.u(10), Ui.u(24), Ui.u(24))
-        root.addView(Ui.spacer(c, weight = 1f), LinearLayout.LayoutParams(1, 0, 1f))
-        val row = Ui.horizontal(c, Gravity.BOTTOM)
-        value = Ui.text(c, "—", 200f, Ui.TEXT, Ui.THIN)
-        row.addView(value)
-        row.addView(Ui.text(c, "g", 60f, Ui.TEXT2, Ui.THIN), Ui.lp(Ui.WRAP, Ui.WRAP, l = 12, b = 34))
-        root.addView(row, Ui.lp(Ui.WRAP, Ui.WRAP))
-        state = Ui.chip(c, "", Icon.Kind.SCALE, Ui.TEXT2)
-        root.addView(state, Ui.lp(Ui.WRAP, Ui.WRAP, t = 6))
-        root.addView(Ui.spacer(c, weight = 1f), LinearLayout.LayoutParams(1, 0, 1f))
-        val buttons = Ui.horizontal(c, Gravity.CENTER)
-        buttons.addView(Ui.button(c, tr("Tare (remise à zéro)"), Ui.Style.PRIMARY, Icon.Kind.SCALE, height = 76, textSize = 23f) {
-            a.machine.tare()
-        })
+        val root = Ui.horizontal(c, Gravity.CENTER_VERTICAL)
+        root.setPadding(Ui.u(24), Ui.u(6), Ui.u(24), Ui.u(22))
+
+        gauge = Gauge(c)
+        root.addView(gauge, LinearLayout.LayoutParams(0, Ui.MATCH, 0.6f).apply { rightMargin = Ui.u(24) })
+
+        val side = Ui.vertical(c)
+        state = Ui.chip(c, "", Icon.Kind.SCALE, Ui.TEXT2, size = 20f)
+        side.addView(state, Ui.lp(Ui.WRAP, Ui.WRAP))
+        side.addView(Ui.text(c, tr("Posez le bol ou un récipient, appuyez sur Tare, puis versez."), 18f, Ui.TEXT2)
+            .apply { setLineSpacing(0f, 1.15f) }, Ui.lp(t = 18))
+        side.addView(Ui.spacer(c, weight = 1f), LinearLayout.LayoutParams(1, 0, 1f))
         if (a.prefs.mode == Prefs.Mode.DEMO) {
-            buttons.addView(Ui.spacer(c, w = 30))
+            // Mode Démo : poids simulés, pour essayer sans robot.
+            val demo = Ui.horizontal(c)
             for (g in intArrayOf(100, 250)) {
-                buttons.addView(Ui.button(c, "+$g g", Ui.Style.GHOST, height = 64) {
+                demo.addView(Ui.button(c, "+$g g", Ui.Style.GHOST, height = 56) {
                     simulated += g
                     a.machine.simulate(weight = simulated)
-                }, Ui.lp(Ui.WRAP, Ui.WRAP, r = 10))
+                }, LinearLayout.LayoutParams(0, Ui.u(56), 1f).apply { rightMargin = Ui.u(10) })
             }
-            buttons.addView(Ui.button(c, tr("Vider"), Ui.Style.GHOST, height = 64) {
+            demo.addView(Ui.button(c, tr("Vider"), Ui.Style.GHOST, height = 56) {
                 simulated = 0
                 a.machine.simulate(weight = 0)
-            })
+            }, LinearLayout.LayoutParams(0, Ui.u(56), 1f))
+            side.addView(demo, Ui.lp(Ui.MATCH, Ui.WRAP, b = 14))
         }
-        root.addView(buttons)
+        side.addView(Ui.button(c, tr("Tare (remise à zéro)"), Ui.Style.PRIMARY, Icon.Kind.SCALE, height = 88, textSize = 23f) {
+            a.machine.tare()
+        }, Ui.lp(Ui.MATCH, Ui.u(88)))
+        side.addView(Ui.text(c, tr("Ou appuyez sur le bouton rotatif"), 15f, Ui.TEXT3).apply { gravity = Gravity.CENTER },
+            Ui.lp(Ui.MATCH, Ui.WRAP, t = 8))
+        root.addView(side, LinearLayout.LayoutParams(0, Ui.MATCH, 0.4f))
+        onSnapshot(a.snapshot)
         return root
     }
 
     override fun onSnapshot(s: Snapshot) {
+        val ticks = (0..5).map { it / 5f to if (it == 5) "5 kg" else "$it" }
         if (!s.hasSample) {
-            value.text = "—"
+            gauge.set(0f, 0f, 1f, Ui.TEXT3, "—", "", tr("Base non connectée"), ticks)
             Ui.chipText(state).text = tr("Base non connectée")
             return
         }
-        value.text = s.weightG.toString()
         val (txt, col) = when {
             s.scaleState == "overload" -> tr("Surcharge") to Ui.DANGER
             s.scaleStable -> tr("Stable") to Ui.OK
             else -> tr("Mesure…") to Ui.TEXT2
         }
+        // Cadran rempli jusqu'à la capacité de la balance (5 kg) ; rouge en surcharge.
+        gauge.set(s.weightG / CAPACITY_G, 0f, 1f, if (col == Ui.DANGER) Ui.DANGER else Ui.ACCENT,
+            "${s.weightG}", "g", txt, ticks)
         Ui.chipText(state).text = txt
         Ui.chipText(state).setTextColor(col)
         (state.getChildAt(0) as Icon).color = col
@@ -73,5 +84,9 @@ class ScaleScreen(a: MainActivity) : Screen(a) {
     override fun onKnobPress(): Boolean {
         a.machine.tare()
         return true
+    }
+
+    private companion object {
+        const val CAPACITY_G = 5000f
     }
 }

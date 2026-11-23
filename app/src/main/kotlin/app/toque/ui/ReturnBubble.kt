@@ -41,6 +41,8 @@ class ReturnBubble : Service() {
         wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val dm = resources.displayMetrics
         Ui.init(dm.widthPixels, dm.heightPixels)
+        // La bulle peut démarrer sans que l'écran principal ait été créé : elle charge le thème elle-même.
+        app.toque.ToqueApp.of(this).prefs.let { Theme.select(it.theme, it.themeMode) }
 
         val v = LinearLayout(this)
         v.orientation = LinearLayout.HORIZONTAL
@@ -48,8 +50,8 @@ class ReturnBubble : Service() {
         v.setPadding(Ui.u(18), Ui.u(12), Ui.u(22), Ui.u(12))
         v.background = Ui.round(Ui.ACCENT, 32f, 0x66000000, 2f)
         v.elevation = Ui.uf(8f)
-        v.addView(Icon(this, Icon.Kind.BACK, DARK), LinearLayout.LayoutParams(Ui.u(26), Ui.u(26)).apply { rightMargin = Ui.u(8) })
-        v.addView(Ui.text(this, tr("Retour à Toque"), 19f, DARK, Ui.MEDIUM))
+        v.addView(Icon(this, Icon.Kind.BACK, Ui.ON_ACCENT), LinearLayout.LayoutParams(Ui.u(26), Ui.u(26)).apply { rightMargin = Ui.u(8) })
+        v.addView(Ui.text(this, tr("Retour à Toque"), 19f, Ui.ON_ACCENT, Ui.MEDIUM))
 
         @Suppress("DEPRECATION")
         val type = if (Build.VERSION.SDK_INT >= 26) TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE
@@ -124,7 +126,7 @@ class ReturnBubble : Service() {
 
     companion object {
         private const val POSITION = "bulle"
-        private const val DARK = 0xFF1A0E05.toInt()
+
         /** WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY (API 26), valeur fixe pour compiler en API 23. */
         private const val TYPE_APPLICATION_OVERLAY = 2038
 

@@ -191,7 +191,7 @@ class HoldButton(c: Context, label: String, private val onDown: () -> Unit, priv
         when (e.action) {
             MotionEvent.ACTION_DOWN -> {
                 background = Ui.round(Ui.WARN, 32f)
-                text.setTextColor(0xFF1A1405.toInt())
+                text.setTextColor(if (Ui.LIGHT_THEME) 0xFFFFFFFF.toInt() else 0xFF1A1405.toInt())
                 onDown()
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {

@@ -68,22 +68,48 @@ class RecipeRepo(private val context: Context) {
 
     fun load() = exec.execute { rebuild() }
 
+    /**
+     * Index de recherche gardé sur disque. Reconstruire l'index demande de relire et découper le
+     * texte de toutes les recettes (plusieurs secondes sur la tablette du robot) ; le relire d'ici
+     * prend une fraction de seconde. Il n'est valable que pour l'état des recettes noté en tête
+     * (voir [stamp]) : la moindre recette ajoutée, modifiée ou supprimée le fait reconstruire.
+     */
+    private val indexFile: File get() = File(context.filesDir, "index-recherche.bin")
+
+    /** Empreinte des recettes : nombre, et dates d'écriture (chaque écriture met sa date à jour). */
+    private fun stamp(db: SQLiteDatabase): String =
+        db.rawQuery("SELECT COUNT(*), IFNULL(MAX(updated), 0), IFNULL(SUM(updated), 0) FROM recipes", null).use { c ->
+            c.moveToFirst()
+            "${c.getLong(0)}|${c.getLong(1)}|${c.getLong(2)}"
+        }
+
+    private fun readCache(stamp: String): SearchIndex? = try {
+        java.io.DataInputStream(java.io.BufferedInputStream(indexFile.inputStream(), 64 * 1024)).use { input ->
+            if (input.readUTF() != stamp) null else SearchIndex.readFrom(input)
+        }
+    } catch (_: Exception) {
+        null   // fichier absent, ancien ou abîmé : on reconstruit
+    }
+
+    private fun writeCache(stamp: String, idx: SearchIndex) {
+        val tmp = File(indexFile.path + ".tmp")
+        try {
+            java.io.DataOutputStream(java.io.BufferedOutputStream(tmp.outputStream(), 64 * 1024)).use { out ->
+                out.writeUTF(stamp)
+                idx.writeTo(out)
+            }
+            if (!tmp.renameTo(indexFile)) { indexFile.delete(); tmp.renameTo(indexFile) }
+        } catch (_: Exception) {
+            tmp.delete()   // pas de cache : l'appli marche, elle reconstruira au prochain démarrage
+        }
+    }
+
     private fun rebuild() {
+        val t0 = android.os.SystemClock.elapsedRealtime()
         val db = helper.writableDatabase
         loadAdjustments(db)
         val favs = HashSet<String>()
         db.rawQuery("SELECT id FROM favorites", null).use { c -> while (c.moveToNext()) favs += c.getString(0) }
-        val list = ArrayList<Recipe>()
-        db.rawQuery("SELECT json FROM recipes", null).use { c ->
-            while (c.moveToNext()) {
-                val r = try {
-                    RecipeCodec.decode(c.getString(0), RecipeSource.IMPORTED)
-                } catch (_: Exception) {
-                    null
-                } ?: continue
-                list += r.copy(favorite = r.id in favs)
-            }
-        }
         synchronized(favorites) {
             favorites.clear()
             favorites += favs
@@ -94,9 +120,33 @@ class RecipeRepo(private val context: Context) {
         }
         cooked.clear()
         cooked.putAll(usage)
-        index = SearchIndex(list)
+        val stamp = stamp(db)
+        val cached = readCache(stamp)
+        val how: String
+        if (cached != null) {
+            index = cached.withFavorites(favs)
+            how = "depuis le cache"
+        } else {
+            val list = ArrayList<Recipe>()
+            db.rawQuery("SELECT json FROM recipes", null).use { c ->
+                while (c.moveToNext()) {
+                    val r = try {
+                        RecipeCodec.decode(c.getString(0), RecipeSource.IMPORTED)
+                    } catch (_: Exception) {
+                        null
+                    } ?: continue
+                    list += r.copy(favorite = r.id in favs)
+                }
+            }
+            index = SearchIndex(list)
+            writeCache(stamp, index)
+            how = "reconstruits"
+        }
         loaded = true
         notifyChanged()
+        // Temps de chargement au journal : utile pour juger la tablette du robot (Réglages › Outils › Journal).
+        app.toque.Logbook(context).write("recettes", "${index.entries.size} recettes $how en " +
+            "${android.os.SystemClock.elapsedRealtime() - t0} ms")
     }
 
     val count: Int get() = index.entries.size
@@ -158,7 +208,10 @@ class RecipeRepo(private val context: Context) {
             val db = helper.writableDatabase
             if (favorite) db.execSQL("INSERT OR IGNORE INTO favorites (id) VALUES (?)", arrayOf(id))
             else db.execSQL("DELETE FROM favorites WHERE id = ?", arrayOf(id))
-            rebuild()
+            // Un favori ne change pas les recettes : l'index est seulement recopié avec le nouveau
+            // favori (instantané), au lieu d'être reconstruit (plusieurs secondes sur le robot).
+            index = index.withFavorites(synchronized(favorites) { HashSet(favorites) })
+            notifyChanged()
         }
     }
 
@@ -304,7 +357,11 @@ class RecipeRepo(private val context: Context) {
         val wanted = gone.filterKeys { it in favs || adjustments.containsKey(it) || usage.containsKey(it) }
         if (wanted.isEmpty()) return
         val byTitle = HashMap<String, String>()
-        for ((id, title) in titles(db)) byTitle.putIfAbsent(RecipeAdjustments.titleKey(title), id)
+        // Pas de putIfAbsent : absent d'Android 6 (API 23), il ferait planter le robot ici.
+        for ((id, title) in titles(db)) {
+            val key = RecipeAdjustments.titleKey(title)
+            if (!byTitle.containsKey(key)) byTitle[key] = id
+        }
         for ((id, title) in wanted) {
             val target = byTitle[RecipeAdjustments.titleKey(title)] ?: continue
             if (target == id) continue

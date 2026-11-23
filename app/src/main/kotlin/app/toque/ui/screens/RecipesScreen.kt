@@ -175,7 +175,9 @@ class RecipesScreen(
         val repo = a.app.recipes
         val index = repo.index
         searchExec.execute {
-            val found = if (q.contains(',')) index.withIngredients(q.split(','), f) else index.search(q, f)
+            // Pas de limite : la grille recycle ses cases, elle affiche sans peine tout le catalogue
+            // (la limite par défaut, 500, coupait « Toutes » après la lettre F environ).
+            val found = if (q.contains(',')) index.withIngredients(q.split(','), f) else index.search(q, f, limit = Int.MAX_VALUE)
             val hits = if (u == Usage.NONE) found else {
                 // Ordre des cuissons ; la recherche tapée, s'il y en a une, ne fait que filtrer.
                 val ids = if (u == Usage.RECENT) repo.recentIds() else repo.mostCookedIds()

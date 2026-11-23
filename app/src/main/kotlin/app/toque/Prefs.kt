@@ -39,6 +39,28 @@ class Prefs(context: Context) {
             p.edit().putString("language", v).commit()
         }
 
+    /** Thème de l'interface (voir ui.Theme.Id) : « bento » par défaut. */
+    var theme: String
+        get() = p.getString("theme", "bento") ?: "bento"
+        set(v) {
+            p.edit().putString("theme", v).commit()
+        }
+
+    /** Prénom affiché après la salutation de l'accueil (« Bonsoir, Camille ») ; vide = pas de prénom. */
+    var firstName: String
+        get() = p.getString("firstName", "") ?: ""
+        set(v) {
+            // apply : écrit en arrière-plan, le champ est enregistré à chaque lettre tapée.
+            p.edit().putString("firstName", v.trim()).apply()
+        }
+
+    /** Sombre, clair ou automatique (voir ui.Theme.Mode). */
+    var themeMode: String
+        get() = p.getString("themeMode", "dark") ?: "dark"
+        set(v) {
+            p.edit().putString("themeMode", v).commit()
+        }
+
     var twinHost: String
         get() = p.getString("twinHost", "127.0.0.1") ?: "127.0.0.1"
         set(v) {
@@ -94,6 +116,20 @@ class Prefs(context: Context) {
         get() = p.getBoolean("sound", true)
         set(v) {
             p.edit().putBoolean("sound", v).commit()
+        }
+
+    /** Jeu de sons (voir ui.SoundPacks.Pack) : « classic » par défaut, les sons d'origine. */
+    var soundPack: String
+        get() = p.getString("soundPack", "classic") ?: "classic"
+        set(v) {
+            p.edit().putString("soundPack", v).commit()
+        }
+
+    /** Petit clic à chaque cran de la molette et à chaque bouton touché. */
+    var clickSound: Boolean
+        get() = p.getBoolean("clickSound", false)
+        set(v) {
+            p.edit().putBoolean("clickSound", v).commit()
         }
 
     /** Mise en veille de l'écran après ce nombre de minutes sans geste (0 : jamais). */

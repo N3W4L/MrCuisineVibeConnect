@@ -29,7 +29,9 @@ import app.toque.core.recipes.UserRecipes
 import app.toque.ui.Icon
 import app.toque.ui.MainActivity
 import app.toque.ui.Screen
+import app.toque.ui.SoundPacks
 import app.toque.ui.Sounds
+import app.toque.ui.Theme
 import app.toque.ui.Ui
 import app.toque.ui.UpdateFlow
 import app.toque.update.Updater
@@ -58,15 +60,57 @@ class SettingsScreen(a: MainActivity) : Screen(a) {
     private var release: Release? = null
     private var updMessage = ""
 
+    /** Une rubrique des réglages : son entrée dans la liste de gauche et sa carte à droite. */
+    private class Section(val title: String, val icon: Icon.Kind, val card: LinearLayout) {
+        lateinit var row: LinearLayout
+        lateinit var iconView: Icon
+        lateinit var label: TextView
+    }
+
+    private val sections = ArrayList<Section>()
+    private lateinit var packRow: LinearLayout
+    private lateinit var weighBox: LinearLayout
+    private val listenButtons = HashMap<SoundPacks.Event, View>()
+
+    /** Barre des quatre jeux de sons ; le choix d'un jeu fait entendre sa fin de programme. */
+    private fun renderPack() {
+        val pack = SoundPacks.Pack.of(a.prefs.soundPack)
+        packRow.removeAllViews()
+        packRow.addView(Ui.segmented(c, SoundPacks.Pack.values().map { Ui.Seg(it.key, it.label) }, pack.key) { k ->
+            a.prefs.soundPack = k
+            SoundPacks.warmUp(SoundPacks.Pack.of(k))
+            renderPack()
+            preview(SoundPacks.Event.PROGRAM_DONE)
+        }, LinearLayout.LayoutParams(0, Ui.MATCH, 1f))
+        // Classique : le son de pesée se choisit parmi les sons d'origine ; pas de son au lancement.
+        weighBox.visibility = if (pack == SoundPacks.Pack.CLASSIC) View.VISIBLE else View.GONE
+        listenButtons[SoundPacks.Event.START]?.let { Ui.setButtonEnabled(it, pack != SoundPacks.Pack.CLASSIC) }
+    }
+
+    /** Fait entendre un son du jeu choisi, même si les sons sont coupés. */
+    private fun preview(e: SoundPacks.Event) {
+        val pack = SoundPacks.Pack.of(a.prefs.soundPack)
+        if (pack != SoundPacks.Pack.CLASSIC) { SoundPacks.play(pack, e); return }
+        when (e) {
+            SoundPacks.Event.WEIGH -> Sounds.weighReached(a.prefs.weighSound)
+            SoundPacks.Event.RECIPE_DONE -> Sounds.recipeDone()
+            SoundPacks.Event.PROGRAM_DONE, SoundPacks.Event.ALERT -> {
+                val was = a.prefs.sound
+                a.prefs.sound = true
+                a.chime(if (e == SoundPacks.Event.ALERT) 3 else 2)
+                a.prefs.sound = was
+            }
+            else -> SoundPacks.play(pack, e)
+        }
+    }
+    private lateinit var detail: LinearLayout
+    private lateinit var detailScroll: android.widget.ScrollView
+
     override fun build(): View {
-        val col = Ui.vertical(c)
-        col.setPadding(Ui.u(24), Ui.u(6), Ui.u(24), Ui.u(24))
-        val columns = Ui.horizontal(c, Gravity.TOP)
+        // Les cartes de chaque rubrique sont construites ici, puis rangées par order() : une liste de
+        // rubriques à gauche, la rubrique choisie seule à droite, sur toute la largeur.
         val left = Ui.vertical(c)
-        val right = Ui.vertical(c)
-        columns.addView(left, LinearLayout.LayoutParams(0, Ui.WRAP, 1f).apply { rightMargin = Ui.u(18) })
-        columns.addView(right, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
-        col.addView(columns)
+        val right = left
 
         // ---- Machine
         val machine = section(left, tr("Machine"), Icon.Kind.POT)
@@ -106,20 +150,71 @@ class SettingsScreen(a: MainActivity) : Screen(a) {
         safety.addView(toggle(tr("Enchaîner les étapes machine des recettes"), a.prefs.chainSteps) { a.prefs.chainSteps = it }, Ui.lp(t = 10))
         safety.addView(Ui.text(c, tr("Les réglages qui se suivent sans geste à faire entre eux partent ensemble d'un seul appui sur Lancer : la lame passe directement à la vitesse et à la température suivantes."),
             15f, Ui.TEXT3).apply { setLineSpacing(0f, 1.1f) }, Ui.lp(t = 6))
-        safety.addView(toggle(tr("Sons"), a.prefs.sound) { a.prefs.sound = it }, Ui.lp(t = 10))
-        safety.addView(Ui.text(c, tr("Son quand la quantité à peser est atteinte"), 18f, Ui.TEXT), Ui.lp(t = 10))
-        safety.addView(dropdown(Sounds.WEIGH_SOUNDS.map { it.first to tr(it.second) }, a.prefs.weighSound) { k ->
+
+        // ---- Sons : jeu de sons, écoute de chaque son, clic. (Avant, rangés dans « Sécurité ».)
+        val sounds = section(right, tr("Sons"), Icon.Kind.BELL)
+        sounds.addView(toggle(tr("Sons activés"), a.prefs.sound) { a.prefs.sound = it })
+        sounds.addView(Ui.text(c, tr("Jeu de sons"), 18f, Ui.TEXT), Ui.lp(t = 14))
+        packRow = Ui.horizontal(c)
+        sounds.addView(packRow, Ui.lp(Ui.MATCH, Ui.u(64), t = 8))
+        sounds.addView(Ui.text(c, tr("Écouter"), 18f, Ui.TEXT), Ui.lp(t = 16))
+        val events = SoundPacks.Event.values().toList()
+        for (line in events.chunked(3)) {
+            val row = Ui.horizontal(c)
+            for ((k, e) in line.withIndex()) {
+                val b = Ui.button(c, e.label, Ui.Style.SECONDARY, Icon.Kind.PLAY, height = 52, textSize = 16f) { preview(e) }
+                listenButtons[e] = b
+                row.addView(b, LinearLayout.LayoutParams(0, Ui.u(52), 1f).apply { if (k < 2) rightMargin = Ui.u(10) })
+            }
+            sounds.addView(row, Ui.lp(Ui.MATCH, Ui.WRAP, t = 8))
+        }
+        weighBox = Ui.vertical(c)
+        weighBox.addView(Ui.text(c, tr("Son quand la quantité à peser est atteinte"), 18f, Ui.TEXT))
+        weighBox.addView(dropdown(Sounds.WEIGH_SOUNDS.map { it.first to tr(it.second) }, a.prefs.weighSound) { k ->
             a.prefs.weighSound = k
             Sounds.weighReached(k)
         }, Ui.lp(Ui.MATCH, Ui.u(58), t = 8))
+        sounds.addView(weighBox, Ui.lp(t = 16))
+        sounds.addView(toggle(tr("Clic de la molette et des boutons"), a.prefs.clickSound) { a.prefs.clickSound = it }, Ui.lp(t = 16))
+        renderPack()
 
         // ---- Langue (titre bilingue : trouvable quelle que soit la langue affichée)
-        val language = section(right, "Langue · Language", Icon.Kind.INFO)
+        val language = section(right, "Langue · Language", Icon.Kind.GLOBE)
         val options = listOf(I18n.AUTO to tr("Automatique (langue du système)")) + I18n.languages.map { it.code to it.name }
         language.addView(dropdown(options, a.prefs.language) { code ->
             a.prefs.language = code
             a.applyLanguage()
         }, Ui.lp(Ui.MATCH, Ui.u(58), t = 4))
+
+        // ---- Apparence : thème et mode sombre / clair. Changer reconstruit l'interface (comme la langue) :
+        // refusé pendant un programme, pour ne pas faire disparaître ses commandes sous le doigt.
+        val look = section(right, tr("Apparence"), Icon.Kind.STAR)
+        look.addView(Ui.text(c, tr("Thème"), 18f, Ui.TEXT))
+        look.addView(dropdown(Theme.Id.values().map { it.key to it.label }, a.prefs.theme) { k ->
+            if (k != a.prefs.theme && themeChangeAllowed()) {
+                a.prefs.theme = k
+                a.applyTheme()
+            }
+        }, Ui.lp(Ui.MATCH, Ui.u(58), t = 8))
+        look.addView(Ui.text(c, tr("Mode"), 18f, Ui.TEXT), Ui.lp(t = 12))
+        look.addView(dropdown(Theme.Mode.values().map { it.key to it.label }, a.prefs.themeMode) { k ->
+            if (k != a.prefs.themeMode && themeChangeAllowed()) {
+                a.prefs.themeMode = k
+                a.applyTheme()
+            }
+        }, Ui.lp(Ui.MATCH, Ui.u(58), t = 8))
+        look.addView(Ui.text(c, tr("En automatique, l'interface est claire de %d h à %d h et sombre le reste du temps.", Theme.dayStart, Theme.dayEnd),
+            15f, Ui.TEXT3).apply { setLineSpacing(0f, 1.1f) }, Ui.lp(t = 8))
+        // Prénom de l'accueil : enregistré à chaque lettre, rien à valider.
+        look.addView(Ui.text(c, tr("Votre prénom, affiché sur l'accueil"), 18f, Ui.TEXT), Ui.lp(t = 12))
+        look.addView(field(a.prefs.firstName, tr("Prénom")).apply {
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
+            addTextChangedListener(object : android.text.TextWatcher {
+                override fun afterTextChanged(e: android.text.Editable?) { a.prefs.firstName = e?.toString() ?: "" }
+                override fun beforeTextChanged(s: CharSequence?, st: Int, n: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, st: Int, before: Int, n: Int) {}
+            })
+        }, Ui.lp(Ui.MATCH, Ui.u(58), t = 8))
 
         // ---- Écran
         val screen = section(right, tr("Écran"), Icon.Kind.CLOCK)
@@ -135,7 +230,7 @@ class SettingsScreen(a: MainActivity) : Screen(a) {
             Ui.lp(Ui.MATCH, Ui.u(58), t = 8))
 
         // ---- Date et heure
-        val time = section(right, tr("Date et heure"), Icon.Kind.CLOCK)
+        val time = section(right, tr("Date et heure"), Icon.Kind.TIMER)
         val zones = listOf(ZoneLookup.AUTO to tr("Automatique (d'après la connexion Internet)")) +
             (ZoneLookup.COMMON + listOf(TimeSync.current(), a.prefs.timeZone))
                 .filter { it != ZoneLookup.AUTO }.distinct().map { it to it.replace('_', ' ') }
@@ -150,7 +245,7 @@ class SettingsScreen(a: MainActivity) : Screen(a) {
         refreshTime()
 
         // ---- Recettes Lidl
-        val lidl = section(right, tr("Recettes Lidl"), Icon.Kind.SYNC)
+        val lidl = section(right, tr("Recettes Lidl"), Icon.Kind.BOOK)
         lidl.addView(Ui.text(c, tr("Toque télécharge lui-même les recettes officielles du Monsieur Cuisine connect sur monsieur-cuisine.com (sans compte)."),
             16f, Ui.TEXT2).apply { setLineSpacing(0f, 1.15f) })
         syncText = Ui.text(c, "", 16f, Ui.TEXT)
@@ -179,7 +274,7 @@ class SettingsScreen(a: MainActivity) : Screen(a) {
             14f, Ui.TEXT3).apply { setLineSpacing(0f, 1.1f) }, Ui.lp(t = 6))
 
         // ---- Mes recettes
-        val mine = section(right, tr("Mes recettes"), Icon.Kind.EDIT)
+        val mine = section(right, tr("Mes recettes"), Icon.Kind.DOWNLOAD)
         mine.addView(Ui.text(c, tr("Sauvegardez vos recettes, ou passez-les à un autre robot, avec le fichier %s du dossier Download.", UserRecipes.FILE_NAME),
             16f, Ui.TEXT2).apply { setLineSpacing(0f, 1.15f) })
         val files = Ui.horizontal(c)
@@ -188,7 +283,7 @@ class SettingsScreen(a: MainActivity) : Screen(a) {
         mine.addView(files, Ui.lp(t = 12))
 
         // ---- Mises à jour
-        val updates = section(left, tr("Mises à jour"), Icon.Kind.INFO)
+        val updates = section(left, tr("Mises à jour"), Icon.Kind.SYNC)
         updText = Ui.text(c, "", 16f, Ui.TEXT2).apply { setLineSpacing(0f, 1.15f) }
         updates.addView(updText)
         updButtons = Ui.horizontal(c)
@@ -208,16 +303,69 @@ class SettingsScreen(a: MainActivity) : Screen(a) {
         tools.addView(Ui.text(c, tr("Toque %s · protocole d'après le Monsieur Cuisine Developer SDK (licence MIT). " +
             "Projet indépendant, non affilié à Lidl ni à SilverCrest.", version), 14f, Ui.TEXT3).apply { setLineSpacing(0f, 1.1f) }, Ui.lp(t = 12))
 
-        return Ui.scroll(c, col)
+        // Les plus utilisées d'abord ; la machine, la langue et les outils, réglés une fois, à la fin.
+        val order = listOf(look, screen, sounds, lidl, mine, safety, machine, time, language, updates, tools)
+        return layout(order.map { card -> sections.first { it.card === card } })
     }
 
+    private fun layout(order: List<Section>): View {
+        val root = Ui.horizontal(c, Gravity.TOP)
+        root.setPadding(Ui.u(24), Ui.u(6), Ui.u(24), Ui.u(20))
+        val nav = Ui.vertical(c)
+        for ((i, sec) in order.withIndex()) {
+            val row = Ui.horizontal(c, Gravity.CENTER_VERTICAL)
+            row.setPadding(Ui.u(16), 0, Ui.u(14), 0)
+            sec.iconView = Icon(c, sec.icon, Ui.TEXT2)
+            row.addView(sec.iconView, LinearLayout.LayoutParams(Ui.u(26), Ui.u(26)).apply { rightMargin = Ui.u(14) })
+            sec.label = Ui.ellipsize(Ui.text(c, sec.title, 16.5f, Ui.TEXT, Ui.MEDIUM))
+            row.addView(sec.label, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
+            // Une nouvelle version attend : un point sur « Mises à jour ».
+            if (sec.title == tr("Mises à jour") && a.updates.available != null) {
+                row.addView(android.view.View(c).apply { background = Ui.round(Ui.ACCENT, 6f) }, LinearLayout.LayoutParams(Ui.u(12), Ui.u(12)))
+            }
+            row.isClickable = true
+            row.setOnClickListener { select(order, i) }
+            sec.row = row
+            nav.addView(row, Ui.lp(Ui.MATCH, Ui.u(44), b = 2))
+        }
+        root.addView(Ui.scroll(c, nav), LinearLayout.LayoutParams(Ui.u(272), Ui.MATCH).apply { rightMargin = Ui.u(18) })
+        detail = Ui.vertical(c)
+        detailScroll = Ui.scroll(c, detail)
+        root.addView(detailScroll, LinearLayout.LayoutParams(0, Ui.MATCH, 1f))
+        select(order, order.indexOfFirst { it.title == lastSection }.coerceAtLeast(0))
+        return root
+    }
+
+    private fun select(order: List<Section>, i: Int) {
+        val sec = order[i]
+        lastSection = sec.title
+        for (o in order) {
+            val on = o === sec
+            o.row.background = Ui.pressable(if (on) Ui.round(Ui.SURFACE3, 18f, Ui.ACCENT, 2f) else Ui.round(0, 18f), 18f)
+            o.iconView.color = if (on) Ui.ACCENT else Ui.TEXT2
+            o.label.setTextColor(if (on) Ui.TEXT else Ui.TEXT2)
+        }
+        detail.removeAllViews()
+        (sec.card.parent as? android.view.ViewGroup)?.removeView(sec.card)
+        detail.addView(sec.card, Ui.lp(Ui.MATCH, Ui.WRAP))
+        detailScroll.scrollTo(0, 0)
+    }
+
+    private fun themeChangeAllowed(): Boolean {
+        if (!a.snapshot.busy) return true
+        a.toast(tr("Arrêtez d'abord le programme en cours"), Ui.WARN)
+        return false
+    }
+
+    @Suppress("UNUSED_PARAMETER")
     private fun section(parent: LinearLayout, title: String, icon: Icon.Kind): LinearLayout {
         val card = Ui.card(c, 24f)
+        card.setPadding(Ui.u(28), Ui.u(22), Ui.u(28), Ui.u(24))
         val head = Ui.horizontal(c)
-        head.addView(Icon(c, icon, Ui.ACCENT), LinearLayout.LayoutParams(Ui.u(24), Ui.u(24)).apply { rightMargin = Ui.u(10) })
-        head.addView(Ui.text(c, title, 21f, Ui.TEXT, Ui.MEDIUM))
-        card.addView(head, Ui.lp(b = 10))
-        parent.addView(card, Ui.lp(b = 16))
+        head.addView(Icon(c, icon, Ui.ACCENT), LinearLayout.LayoutParams(Ui.u(30), Ui.u(30)).apply { rightMargin = Ui.u(12) })
+        head.addView(Ui.text(c, title, 26f, Ui.TEXT, Ui.MEDIUM))
+        card.addView(head, Ui.lp(b = 14))
+        sections += Section(title, icon, card)
         return card
     }
 
@@ -239,7 +387,7 @@ class SettingsScreen(a: MainActivity) : Screen(a) {
         val sw = Ui.text(c, "", 16f, Ui.TEXT, Ui.MEDIUM).apply { gravity = Gravity.CENTER }
         fun paint() {
             sw.text = if (state) tr("Oui") else tr("Non")
-            sw.setTextColor(if (state) 0xFF1A0E05.toInt() else Ui.TEXT2)
+            sw.setTextColor(if (state) Ui.ON_ACCENT else Ui.TEXT2)
             sw.background = if (state) Ui.round(Ui.ACCENT, 24f) else Ui.round(Ui.SURFACE3, 24f)
         }
         paint()
@@ -567,5 +715,10 @@ class SettingsScreen(a: MainActivity) : Screen(a) {
     override fun onSnapshot(s: Snapshot) {
         bowlText.text = if (s.hasSample) tr("Capteur du bol en ce moment : %s. Vérifiez qu'il change quand vous retirez le bol avant d'activer cette option.",
             if (s.bowlDetected) tr("bol détecté") else tr("bol NON détecté")) else tr("Base non connectée")
+    }
+
+    private companion object {
+        /** Dernière rubrique ouverte : on y revient après un changement de thème ou de langue. */
+        var lastSection = ""
     }
 }
