@@ -299,15 +299,22 @@ object Ui {
         else -> COOL
     }
 
+    private val PLACEHOLDERS_DARK = intArrayOf(
+        0xFF3A2416.toInt(), 0xFF16302A.toInt(), 0xFF2B2140.toInt(), 0xFF3B1E26.toInt(),
+        0xFF1C2B3E.toInt(), 0xFF35301A.toInt(), 0xFF1E3320.toInt(), 0xFF3A2A1C.toInt(),
+    )
+    private val PLACEHOLDERS_LIGHT = intArrayOf(
+        0xFFE8D5C4.toInt(), 0xFFC5DDD4.toInt(), 0xFFD4CDE4.toInt(), 0xFFE4CCD2.toInt(),
+        0xFFC8D5E4.toInt(), 0xFFE0DBC4.toInt(), 0xFFC9DEC9.toInt(), 0xFFE4D4C4.toInt(),
+    )
+
     /** Couleur de repli stable pour une vignette de recette sans photo. */
     fun placeholderColors(seed: String): IntArray {
-        val palette = intArrayOf(
-            0xFF3A2416.toInt(), 0xFF16302A.toInt(), 0xFF2B2140.toInt(), 0xFF3B1E26.toInt(),
-            0xFF1C2B3E.toInt(), 0xFF35301A.toInt(), 0xFF1E3320.toInt(), 0xFF3A2A1C.toInt(),
-        )
-        val i = Math.abs(seed.hashCode()) % palette.size
-        val a = palette[i]
-        val b = palette[(i + 3) % palette.size]
+        // Teintes douces en thème clair, foncées en thème sombre.
+        val placeholders = if (p.light) PLACEHOLDERS_LIGHT else PLACEHOLDERS_DARK
+        val i = Math.abs(seed.hashCode()) % placeholders.size
+        val a = placeholders[i]
+        val b = placeholders[(i + 3) % placeholders.size]
         return intArrayOf(a, b)
     }
 

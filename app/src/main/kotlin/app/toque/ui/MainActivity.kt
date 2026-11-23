@@ -20,13 +20,19 @@ import app.toque.Prefs
 import app.toque.ToqueApp
 import app.toque.core.i18n.I18n
 import app.toque.core.i18n.tr
+import app.toque.core.machine.Accessory
 import app.toque.core.machine.EventType
+import app.toque.core.machine.Limits
 import app.toque.core.machine.JobSpec
 import app.toque.core.machine.MachineEvent
 import app.toque.core.machine.PauseReason
 import app.toque.core.machine.SafetyPolicy
 import app.toque.core.machine.Snapshot
 import app.toque.core.machine.Verdict
+import app.toque.core.robot.DeviceFacts
+import app.toque.core.robot.RobotDetector
+import app.toque.core.robot.RobotProfile
+import app.toque.core.robot.RobotProfiles
 import app.toque.recipes.LidlSync
 import app.toque.recipes.SyncService
 import app.toque.ui.screens.HomeScreen
@@ -112,6 +118,90 @@ class MainActivity : Activity() {
             // Premier lancement : le bouton du robot n'envoie pas les mêmes touches partout.
             prefs.knobSetupShown = true
             push(KnobSetupScreen(this))
+        }
+        // Robot pas encore confirmé : on le reconnaît sans rien lui envoyer, la personne confirme.
+        if (!prefs.robotConfirmed) root.post { askRobot() }
+    }
+
+    /** Ce que la tablette laisse voir (applis d'origine installées, Android, ports), sans parler à la base. */
+    private fun deviceFacts(): DeviceFacts {
+        val pm = packageManager
+        val installed = RobotProfiles.ALL.map { it.vendorPackage }.filter { pkg ->
+            try {
+                pm.getPackageInfo(pkg, 0)
+                true
+            } catch (_: Exception) {
+                false
+            }
+        }.toSet()
+        val ports = RobotProfiles.ALL.map { it.serialDevice }.filter { java.io.File(it).exists() }.toSet()
+        return DeviceFacts(installed, android.os.Build.VERSION.SDK_INT, ports)
+    }
+
+    /**
+     * « Quel est votre robot ? » : le robot reconnu est proposé en premier ; la personne choisit.
+     * Tant qu'elle n'a pas choisi, Toque n'ouvre pas la liaison avec la base en « Machine réelle ».
+     */
+    fun askRobot() {
+        val d = RobotDetector.detect(deviceFacts())
+        val card = Ui.card(this, 28f, Ui.SURFACE2)
+        card.setPadding(Ui.u(32), Ui.u(28), Ui.u(32), Ui.u(26))
+        card.addView(Ui.text(this, tr("Quel est votre robot ?"), 26f, Ui.TEXT, Ui.MEDIUM))
+        val found = d.profile
+        val intro = if (found != null) tr("Robot reconnu : %s (%s). Confirmez-le.", found.displayName, d.reason)
+            else tr("Robot pas reconnu (%s). Choisissez-le d'après l'étiquette sous le robot.", d.reason)
+        card.addView(Ui.text(this, intro + "\n" + tr("Toque ne parle à la base qu'une fois le robot confirmé."), 18f, Ui.TEXT2)
+            .apply { setLineSpacing(0f, 1.2f) }, Ui.lp(t = 12, b = 18))
+        val order = if (found != null) listOf(found) + RobotProfiles.ALL.filter { it !== found } else RobotProfiles.ALL
+        for (p in order) {
+            val label = p.displayName + " (" + p.models.joinToString(", ") + ")" + if (p.tested) "" else " · " + tr("en test")
+            card.addView(Ui.button(this, label, if (p === found) Ui.Style.PRIMARY else Ui.Style.SECONDARY, height = 60, textSize = 18f) {
+                closeOverlay()
+                setRobot(p)
+            }, Ui.lp(Ui.MATCH, Ui.WRAP, b = 10))
+        }
+        card.addView(Ui.button(this, tr("Plus tard"), Ui.Style.GHOST, height = 56) { closeOverlay() }, Ui.lp(Ui.WRAP, Ui.WRAP, t = 4))
+        showOverlay(card, 720, dismissOnScrim = false)
+    }
+
+    /** Change de robot : relance la liaison avec la base et refiltre les recettes. Refusé pendant un programme. */
+    fun setRobot(p: RobotProfile) {
+        if (snapshot.busy) {
+            toast(tr("Impossible pendant un programme"), Ui.WARN)
+            return
+        }
+        val before = RobotProfiles.byId(prefs.robotId)
+        prefs.robotId = p.id
+        RobotProfiles.active = p
+        machine.reconfigure { v -> if (!v.ok) refusal(v) }
+        app.recipes.load()
+        refreshTitle()
+        // Les Réglages ouverts montrent des choses propres au robot (recettes Lidl, import) : on les refait.
+        if (current is SettingsScreen && before !== p) replace(SettingsScreen(this))
+        val msg = if (!p.tested) tr("%s : en test. Vos retours sont attendus sur GitHub.", p.displayName) else tr("Robot : %s", p.displayName)
+        toast(msg, if (p.tested) Ui.OK else Ui.WARN)
+        if (before != null && before.lidlDevice != p.lidlDevice && app.recipes.count > 0)
+            toast(tr("Synchronisez les recettes Lidl pour avoir celles de ce robot."), Ui.WARN)
+    }
+
+    /**
+     * Appui sur Turbo. Sur le Smart, la température n'est mesurée qu'après une chauffe : si elle est
+     * inconnue, on demande d'abord de confirmer que le contenu est froid, puis de rappuyer.
+     */
+    fun turboDown(accessory: Accessory) {
+        machine.turboDown(accessory) { v ->
+            if (!v.ok && v.has(SafetyPolicy.COLD_CONFIRM) && v.violations.size == 1) {
+                machine.turboUp()
+                confirm(
+                    tr("Contenu froid ?"),
+                    tr("Ce robot ne mesure la température qu'après une chauffe. Le Turbo est interdit au-dessus de %d °C.\n\n" +
+                        "Confirmez que le contenu est froid, puis appuyez de nouveau sur Turbo. La confirmation est oubliée à l'ouverture du couvercle.",
+                        Limits.HOT_C),
+                    tr("Le contenu est froid"), icon = Icon.Kind.THERMO,
+                ) { machine.confirmCold { refusal(it) } }
+            } else {
+                refusal(v)
+            }
         }
     }
 
@@ -437,8 +527,12 @@ class MainActivity : Activity() {
             if (!v.ok && v.has(SafetyPolicy.HOT_BLEND) && v.violations.size == 1) {
                 confirm(
                     tr("Contenu chaud"),
-                    tr("Le bol est à %d °C. Mixer chaud peut provoquer des projections.\n\n" +
-                        "Vérifiez que le couvercle est verrouillé, que le gobelet est en place et que le bol n'est pas trop rempli.", snapshot.actualTempC) +
+                    // Smart : la base ne mesure la température qu'après une chauffe ; Toque la croit chaude.
+                    (if (RobotProfiles.active.capabilities.measuresTemperature)
+                        tr("Le bol est à %d °C. Mixer chaud peut provoquer des projections.\n\n" +
+                            "Vérifiez que le couvercle est verrouillé, que le gobelet est en place et que le bol n'est pas trop rempli.", snapshot.actualTempC)
+                    else tr("Ce robot ne mesure pas toujours la température du bol : Toque considère le contenu comme chaud. Mixer chaud peut provoquer des projections.\n\n" +
+                            "Vérifiez que le couvercle est verrouillé, que le gobelet est en place et que le bol n'est pas trop rempli.")) +
                         if (prefs.hotRamp) " " + tr("La vitesse montera progressivement.") else "",
                     tr("Mixer quand même"), icon = Icon.Kind.THERMO,
                 ) {
@@ -487,6 +581,8 @@ class MainActivity : Activity() {
             sync.forceStop()
             sync.setVendorHardware(false)
             main.post { machine.resumePort() }
+            // Base de l'appli d'origine : copiée seulement quand son format est connu (Connect).
+            if (!prefs.robot.stockImport) return@Thread
             val r = sync.importNow()
             main.post { toast(r.message, if (r.ok) Ui.OK else Ui.WARN) }
         }.start()

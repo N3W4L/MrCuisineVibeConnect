@@ -1,5 +1,8 @@
 package app.toque.ui.screens
 
+import app.toque.core.protocol.Smart
+import app.toque.core.robot.Feature
+import app.toque.core.robot.RobotProfiles
 import android.os.SystemClock
 import android.view.Gravity
 import android.view.View
@@ -40,9 +43,18 @@ class ManualScreen(
     override val title = if (onPick != null) tr("Réglage de l'étape") else JobKind.MANUAL.label
 
     private var seconds = preset?.seconds?.takeIf { it > 0 } ?: 60
-    private var tempLevel = preset?.temperatureLevel ?: 0
-    // Vitesse 0 = chauffe sans mélange : seulement avec une température.
-    private var speed = (preset?.speed ?: 2).coerceIn(if (tempLevel > 0) 0 else 1, 10)
+    /** Températures du robot choisi (le Smart a 40 °C en plus) ; 0 = sans chauffe. */
+    private val caps = RobotProfiles.active.capabilities
+    private var tempC = preset?.tempC?.let { c -> if (c == 0) 0 else caps.temperaturesC.lastOrNull { it <= c } ?: caps.temperaturesC.first() } ?: 0
+    /** Niveau de la table de Toque (règles de sécurité) : 40 °C compte pour 37 °C. */
+    private val tempLevel: Int get() = Mcc.levelAtMost(tempC)
+    /** Smart, 40 °C : niveau de sa table ; null sinon. */
+    private val smartLevel: Int? get() =
+        if (tempC > 0 && Mcc.levelForCelsius(tempC) < 0 && tempC in Smart.TEMPERATURE_LEVELS) Smart.TEMPERATURE_LEVELS.indexOf(tempC) else null
+    /** Chauffe lame à l'arrêt (vitesse 0) : seulement sur un robot qui la sait faire (Connect). */
+    private val noStir: Boolean get() = caps.has(Feature.HEAT_NO_STIR)
+    // Vitesse 0 = chauffe sans mélange : seulement avec une température, et si le robot le permet.
+    private var speed = (preset?.speed ?: 2).coerceIn(if (tempC > 0 && caps.has(Feature.HEAT_NO_STIR)) 0 else 1, 10)
     private var reverse = preset?.reverse ?: false
     private var accessory = preset?.accessory ?: Accessory.BLADE
     private var selected = 0
@@ -162,7 +174,7 @@ class ManualScreen(
         }
         right.addView(scaleRow, Ui.lp(Ui.MATCH, Ui.u(60), b = 14))
         turbo = HoldButton(c, "Turbo", onDown = {
-            a.machine.turboDown(accessory) { v -> if (!v.ok) a.refusal(v) }
+            a.turboDown(accessory)
         }, onUp = { a.machine.turboUp() })
         right.addView(turbo, Ui.lp(Ui.MATCH, Ui.u(72)))
         if (onPick != null) turbo.visibility = View.GONE
@@ -222,8 +234,8 @@ class ManualScreen(
         return max to why
     }
 
-    /** En chauffe, la vitesse descend jusqu'à 0 : la lame reste à l'arrêt. */
-    private val minSpeed: Int get() = if (tempLevel > 0) 0 else 1
+    /** En chauffe, la vitesse descend jusqu'à 0 (lame à l'arrêt), si le robot sait chauffer sans mélanger. */
+    private val minSpeed: Int get() = if (tempLevel > 0 && noStir) 0 else 1
 
     private fun speedName(v: Int): String = when (v) {
         0 -> tr("Sans mélange")
@@ -235,7 +247,7 @@ class ManualScreen(
 
     private fun tempName(t: Int): String = if (t >= 100) tr("Ébullition") else if (t >= 60) tr("Cuisson") else tr("Tiédir")
 
-    private val tempSteps: IntArray get() = intArrayOf(0) + (1..19).toList().toIntArray()
+    private val tempSteps: IntArray get() = intArrayOf(0) + caps.temperaturesC.toIntArray()
 
     private fun nextSeconds(s: Int, dir: Int): Int {
         val step = when {
@@ -252,8 +264,8 @@ class ManualScreen(
         when (card) {
             0 -> seconds = nextSeconds(seconds, dir)
             1 -> {
-                val i = tempSteps.indexOf(tempLevel).coerceAtLeast(0)
-                tempLevel = tempSteps[(i + dir).coerceIn(0, tempSteps.size - 1)]
+                val i = tempSteps.indexOf(tempC).coerceAtLeast(0)
+                tempC = tempSteps[(i + dir).coerceIn(0, tempSteps.size - 1)]
                 if (tempLevel > 0 && speed > Limits.MAX_SPEED_HEATED) {
                     speed = Limits.MAX_SPEED_HEATED
                     notice(tr("En chauffe, vitesse %d maximum", Limits.MAX_SPEED_HEATED))
@@ -292,8 +304,8 @@ class ManualScreen(
     /** Sans mélange, la base chauffe par l'opération vapeur : 120 °C au plus, comme le programme Vapeur. */
     private fun capNoStirTemperature() {
         if (speed == 0 && tempLevel > Limits.MAX_TEMP_LEVEL_NO_STIR) {
-            tempLevel = Limits.MAX_TEMP_LEVEL_NO_STIR
-            notice(tr("Sans mélange, %d °C maximum", Mcc.celsiusForLevel(tempLevel)))
+            tempC = Mcc.celsiusForLevel(Limits.MAX_TEMP_LEVEL_NO_STIR)
+            notice(tr("Sans mélange, %d °C maximum", tempC))
         }
     }
 
@@ -320,12 +332,12 @@ class ManualScreen(
 
     private fun spec(hot: Boolean = false) = Programs.manual(
         speed, tempLevel, if (reverse) Direction.COUNTER_CLOCKWISE else Direction.CLOCKWISE,
-        seconds * 1000L, accessory, hot,
+        seconds * 1000L, accessory, hot, smartLevel = smartLevel,
     )
 
     private fun start() {
         onPick?.let { pick ->
-            pick(app.toque.core.recipes.StepMachine(seconds = seconds, speed = speed, tempC = Mcc.celsiusForLevel(tempLevel),
+            pick(app.toque.core.recipes.StepMachine(seconds = seconds, speed = speed, tempC = tempC,
                 reverse = reverse && speed > 0, accessory = accessory))
             a.back()
             return
@@ -346,10 +358,12 @@ class ManualScreen(
         // La durée n'est renvoyée que si elle a été modifiée : changer la vitesse ne relance pas le minuteur.
         val total: Long? = if (timeEdited) s.elapsedMs + seconds * 1000L else null
         timeEdited = false
-        a.machine.adjust(speed, tempLevel, reverse, total, s.hotBlendConfirmed) { v ->
+        a.machine.adjust(speed, tempLevel, reverse, total, s.hotBlendConfirmed, smartLevel) { v ->
             if (!v.ok && v.has(SafetyPolicy.HOT_BLEND)) {
-                a.confirm(tr("Contenu chaud"), tr("Le bol est à %d °C. Passer à la vitesse %d ?", a.snapshot.actualTempC, speed), tr("Confirmer"), icon = Icon.Kind.THERMO) {
-                    a.machine.adjust(speed, tempLevel, reverse, total, true) { a.refusal(it) }
+                val q = if (RobotProfiles.active.capabilities.measuresTemperature) tr("Le bol est à %d °C. Passer à la vitesse %d ?", a.snapshot.actualTempC, speed)
+                    else tr("Ce robot ne mesure pas toujours la température du bol : Toque considère le contenu comme chaud. Passer à la vitesse %d ?", speed)
+                a.confirm(tr("Contenu chaud"), q, tr("Confirmer"), icon = Icon.Kind.THERMO) {
+                    a.machine.adjust(speed, tempLevel, reverse, total, true, smartLevel) { a.refusal(it) }
                 }
             } else a.refusal(v)
         }
@@ -416,8 +430,9 @@ class ManualScreen(
             }
             1 -> {
                 val editing = pendingEdit || SystemClock.uptimeMillis() < ownTargetUntil
-                val level = if (s.jobActive && s.jobTempLevel > 0 && !editing) s.jobTempLevel else tempLevel
-                val t = Mcc.celsiusForLevel(level)
+                // °C exacts (40 °C sur le Smart) ; la position sur le cadran suit la table de Toque.
+                val t = if (s.jobActive && s.jobTempLevel > 0 && !editing) s.jobTempC else tempC
+                val level = if (t > 0) Mcc.levelAtMost(t) else 0
                 val okTo = if (speed == 0) Limits.MAX_TEMP_LEVEL_NO_STIR / 19f else 1f
                 val ticks = listOf(37, 60, 100, 130).map { v -> Mcc.TEMPERATURE_LEVELS.indexOf(v) / 19f to "$v" }
                 g.set(level / 19f, 0f, okTo, if (level == 0) Ui.TEXT3 else Ui.tempColor(t),

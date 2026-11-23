@@ -269,7 +269,11 @@ class CookScreen(a: MainActivity, private val recipe: Recipe, startStep: Int) : 
             StepProgram.STEAM -> Icon.Kind.STEAM
             StepProgram.TOAST -> Icon.Kind.FLAME
             StepProgram.TURBO -> Icon.Kind.BOLT
-            StepProgram.MANUAL -> Icon.Kind.POT
+            StepProgram.MANUAL, StepProgram.SLOW_COOK -> Icon.Kind.POT
+            StepProgram.MIXER -> Icon.Kind.SPEED
+            StepProgram.SMOOTHIE -> Icon.Kind.DROP
+            StepProgram.SOUS_VIDE -> Icon.Kind.THERMO
+            StepProgram.FERMENT -> Icon.Kind.TIMER
         }
         badge.addView(Icon(c, kindIcon, Ui.ACCENT), Ui.flp(Ui.u(28), Ui.u(28), Gravity.CENTER))
         head.addView(badge, LinearLayout.LayoutParams(Ui.u(48), Ui.u(48)).apply { rightMargin = Ui.u(12) })
@@ -279,6 +283,7 @@ class CookScreen(a: MainActivity, private val recipe: Recipe, startStep: Int) : 
             StepProgram.STEAM -> JobKind.STEAM.label
             StepProgram.TOAST -> JobKind.TOAST.label
             StepProgram.TURBO -> JobKind.TURBO.label
+            StepProgram.MIXER, StepProgram.SMOOTHIE, StepProgram.SOUS_VIDE, StepProgram.SLOW_COOK, StepProgram.FERMENT -> m.program.label
         }, 22f, Ui.TEXT, Ui.MEDIUM))
         info.addView(head)
 
@@ -333,7 +338,7 @@ class CookScreen(a: MainActivity, private val recipe: Recipe, startStep: Int) : 
         if (m.program == StepProgram.TURBO) {
             val t = HoldButton(c, tr("Maintenir pour Turbo"), onDown = {
                 markReviewed(listOf(index))
-                a.machine.turboDown(m.accessory) { v -> if (!v.ok) a.refusal(v) }
+                a.turboDown(m.accessory)
             }, onUp = { a.machine.turboUp() })
             turboBtn = t
             startBtn = t

@@ -60,12 +60,14 @@ class Telemetry(
     val calibrationStep: Int,
     val unknownByte24: Int,
     val warnings: List<String>,
+    /** Niveau de vitesse renvoyé tel quel par la carte (Smart : écho de la commande), -1 sinon. */
+    val reportedSpeedLevel: Int = -1,
 ) {
     val targetSpeedLevelSigned: Int get() = if (targetSpeedLevel < 128) targetSpeedLevel else targetSpeedLevel - 256
     val targetTemperatureLevelSigned: Int get() = if (targetTemperatureLevel < 128) targetTemperatureLevel else targetTemperatureLevel - 256
     val unknownByte24Signed: Int get() = if (unknownByte24 < 128) unknownByte24 else unknownByte24 - 256
     val androidScaleState: String get() = if (scaleState == "not_available") "overload" else scaleState
-    val actualSpeedLevel: Int get() = Mcc.actualSpeedLevel(actualRpm)
+    val actualSpeedLevel: Int get() = if (reportedSpeedLevel >= 0) reportedSpeedLevel else Mcc.actualSpeedLevel(actualRpm)
 
     /** Moteur réellement à l'arrêt selon cet échantillon (bit moteur ET régime mesuré nul). */
     val motorStopped: Boolean get() = !motorOn && actualRpm == 0
@@ -235,20 +237,20 @@ object Mcc {
  * Découpage robuste d'un flux d'octets : réassemble les trames fragmentées, accepte les
  * trames collées et se resynchronise après des octets corrompus. Garde au plus 26 octets.
  */
-class MccStreamParser(private val expectedSize: Int = Mcc.RX_SIZE) {
+class MccStreamParser(private val expectedSize: Int = Mcc.RX_SIZE) : FrameParser {
     init {
         require(expectedSize == Mcc.TX_SIZE || expectedSize == Mcc.RX_SIZE)
     }
 
     private val buffer = ByteArray(expectedSize)
     private var count = 0
-    var discardedBytes = 0L
+    override var discardedBytes = 0L
         private set
-    var invalidFrames = 0L
+    override var invalidFrames = 0L
         private set
     val bufferedBytes: Int get() = count
 
-    fun reset() {
+    override fun reset() {
         count = 0
     }
 
@@ -258,7 +260,7 @@ class MccStreamParser(private val expectedSize: Int = Mcc.RX_SIZE) {
         discardedBytes++
     }
 
-    fun feed(data: ByteArray, length: Int = data.size, out: MutableList<ByteArray> = ArrayList(2)): MutableList<ByteArray> {
+    override fun feed(data: ByteArray, length: Int, out: MutableList<ByteArray>): MutableList<ByteArray> {
         val kind = if (expectedSize == Mcc.TX_SIZE) 0xA1 else 0xB1
         for (i in 0 until length) {
             buffer[count++] = data[i]

@@ -10,6 +10,8 @@ import app.toque.core.recipes.Recipe
 import app.toque.core.recipes.RecipeAdjustments
 import app.toque.core.recipes.RecipeCodec
 import app.toque.core.recipes.RecipeSource
+import app.toque.core.robot.RecipeCompat
+import app.toque.core.robot.RobotProfiles
 import app.toque.core.recipes.SearchIndex
 import app.toque.core.recipes.UserRecipes
 import app.toque.core.recipes.adjusted
@@ -49,6 +51,9 @@ class RecipeRepo(private val context: Context) {
         private set
     @Volatile var loaded = false
         private set
+    /** Recettes enregistrées mais pas faisables sur le robot choisi : pas montrées (voir [RecipeCompat]). */
+    @Volatile var hiddenCount = 0
+        private set
     private val favorites = HashSet<String>()
     /** Une recette cuisinée [count] fois, la dernière à [lastMs]. */
     class Usage(val count: Int, val lastMs: Long)
@@ -76,26 +81,35 @@ class RecipeRepo(private val context: Context) {
      */
     private val indexFile: File get() = File(context.filesDir, "index-recherche.bin")
 
-    /** Empreinte des recettes : nombre, et dates d'écriture (chaque écriture met sa date à jour). */
+    /**
+     * Empreinte des recettes : nombre, dates d'écriture (chaque écriture met sa date à jour), et le
+     * robot choisi, puisque seules les recettes faisables sur ce robot entrent dans l'index.
+     */
     private fun stamp(db: SQLiteDatabase): String =
         db.rawQuery("SELECT COUNT(*), IFNULL(MAX(updated), 0), IFNULL(SUM(updated), 0) FROM recipes", null).use { c ->
             c.moveToFirst()
-            "${c.getLong(0)}|${c.getLong(1)}|${c.getLong(2)}"
+            "${c.getLong(0)}|${c.getLong(1)}|${c.getLong(2)}|${RobotProfiles.active.id}"
         }
 
-    private fun readCache(stamp: String): SearchIndex? = try {
+    /** Index relu du disque et nombre de recettes masquées (pas faites pour ce robot), ou null. */
+    private fun readCache(stamp: String): Pair<SearchIndex, Int>? = try {
         java.io.DataInputStream(java.io.BufferedInputStream(indexFile.inputStream(), 64 * 1024)).use { input ->
-            if (input.readUTF() != stamp) null else SearchIndex.readFrom(input)
+            if (input.readUTF() != stamp) null
+            else {
+                val hidden = input.readInt()
+                SearchIndex.readFrom(input)?.let { it to hidden }
+            }
         }
     } catch (_: Exception) {
         null   // fichier absent, ancien ou abîmé : on reconstruit
     }
 
-    private fun writeCache(stamp: String, idx: SearchIndex) {
+    private fun writeCache(stamp: String, idx: SearchIndex, hidden: Int) {
         val tmp = File(indexFile.path + ".tmp")
         try {
             java.io.DataOutputStream(java.io.BufferedOutputStream(tmp.outputStream(), 64 * 1024)).use { out ->
                 out.writeUTF(stamp)
+                out.writeInt(hidden)
                 idx.writeTo(out)
             }
             if (!tmp.renameTo(indexFile)) { indexFile.delete(); tmp.renameTo(indexFile) }
@@ -124,10 +138,13 @@ class RecipeRepo(private val context: Context) {
         val cached = readCache(stamp)
         val how: String
         if (cached != null) {
-            index = cached.withFavorites(favs)
+            index = cached.first.withFavorites(favs)
+            hiddenCount = cached.second
             how = "depuis le cache"
         } else {
             val list = ArrayList<Recipe>()
+            val robot = RobotProfiles.active
+            var hidden = 0
             db.rawQuery("SELECT json FROM recipes", null).use { c ->
                 while (c.moveToNext()) {
                     val r = try {
@@ -135,11 +152,22 @@ class RecipeRepo(private val context: Context) {
                     } catch (_: Exception) {
                         null
                     } ?: continue
+                    // Seulement les recettes que ce robot sait faire (programmes, températures, robots du site).
+                    val ok = try {
+                        RecipeCompat.supports(r, robot)
+                    } catch (_: Exception) {
+                        false
+                    }
+                    if (!ok) {
+                        hidden++
+                        continue
+                    }
                     list += r.copy(favorite = r.id in favs)
                 }
             }
+            hiddenCount = hidden
             index = SearchIndex(list)
-            writeCache(stamp, index)
+            writeCache(stamp, index, hidden)
             how = "reconstruits"
         }
         loaded = true

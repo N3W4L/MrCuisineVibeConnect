@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Process
 import app.toque.core.i18n.I18n
+import app.toque.core.robot.RobotProfiles
 import app.toque.machine.MachineClient
 import app.toque.recipes.RecipeRepo
 import app.toque.ui.MainActivity
@@ -28,6 +29,10 @@ class ToqueApp : Application() {
         log = Logbook(this)
         LanguageFiles.install(this, log)
         I18n.select(I18n.resolve(prefs.language, Locale.getDefault().language).code)
+        // Thème de l'interface (Réglages › Apparence), pour l'écran principal comme pour la bulle.
+        app.toque.ui.Theme.select(prefs.theme, prefs.themeMode)
+        // Robot choisi : lu par le cœur (recettes, réglages proposés), dans les deux processus.
+        RobotProfiles.active = prefs.robot
         // Racines récentes absentes d'Android 6 (voir ExtraRoots), pour toutes les connexions HTTPS.
         try {
             HttpsURLConnection.setDefaultSSLSocketFactory(ExtraRoots.socketFactory(this))
