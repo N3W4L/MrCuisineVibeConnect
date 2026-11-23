@@ -114,7 +114,7 @@ class RecipeScreen(a: MainActivity, val recipe: Recipe) : Screen(a) {
         left.addView(actions, Ui.lp(t = 14))
 
         renderIngredients()
-        left.addView(Ui.scroll(c, ingredientsBox), LinearLayout.LayoutParams(Ui.MATCH, 0, 1f).apply { topMargin = Ui.u(10) })
+        left.addView(Ui.scroll(c, ingredientsBox), LinearLayout.LayoutParams(Ui.MATCH, 0, 1f).apply { topMargin = Ui.u(8) })
         root.addView(left, LinearLayout.LayoutParams(0, Ui.MATCH, 0.42f).apply { rightMargin = Ui.u(24) })
 
         // ---- colonne droite
@@ -170,10 +170,10 @@ class RecipeScreen(a: MainActivity, val recipe: Recipe) : Screen(a) {
             ing.addView(note, Ui.lp(b = 4))
         }
         if (recipe.servings > 0) {
-            val head = Ui.horizontal(c)
-            head.addView(section(tr("Ingrédients")), LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
-            head.addView(servingsStepper(), Ui.lp(Ui.WRAP, Ui.WRAP, t = 6))
-            ing.addView(head, Ui.lp(t = 8))
+            val head = Ui.horizontal(c, Gravity.CENTER_VERTICAL)
+            head.addView(section(tr("Ingrédients")).apply { setPadding(0, 0, 0, 0) }, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
+            head.addView(servingsStepper(), Ui.lp(Ui.WRAP, Ui.WRAP))
+            ing.addView(head, Ui.lp(t = 2))
             if (shown.servings != recipe.servings) ing.addView(servingsNotice(), Ui.lp(t = 8, b = 4))
         } else {
             ing.addView(section(tr("Ingrédients")), Ui.lp(t = 8))
