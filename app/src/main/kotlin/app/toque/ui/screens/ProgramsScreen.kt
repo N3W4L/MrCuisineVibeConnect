@@ -178,9 +178,9 @@ class ProgramsScreen(a: MainActivity) : Screen(a) {
             val s = p.seconds
             p.value.text = when {
                 s < 60 -> s.toString()
-                s >= 3600 -> String.format("%d:%02d", s / 3600, s / 60 % 60)
+                s >= 3600 -> String.format(java.util.Locale.ROOT, "%d:%02d", s / 3600, s / 60 % 60)
                 s % 60 == 0 -> (s / 60).toString()
-                else -> String.format("%d:%02d", s / 60, s % 60)
+                else -> String.format(java.util.Locale.ROOT, "%d:%02d", s / 60, s % 60)
             }
             p.unit.text = if (s < 60) "s" else if (s >= 3600) "h" else "min"
             p.temp?.text = "${p.celsius} °C"

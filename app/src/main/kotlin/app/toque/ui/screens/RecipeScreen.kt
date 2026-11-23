@@ -82,7 +82,7 @@ class RecipeScreen(a: MainActivity, val recipe: Recipe) : Screen(a) {
         over.setPadding(Ui.u(18), Ui.u(14), Ui.u(18), Ui.u(14))
         over.addView(Ui.ellipsize(Ui.text(c, recipe.title, 24f, Color.WHITE, Ui.MEDIUM).apply { setLineSpacing(0f, 1.05f) }, 2))
         val meta = Ui.horizontal(c)
-        if (recipe.totalMinutes > 0) meta.addView(photoChip(minutes(recipe.totalMinutes), Icon.Kind.CLOCK), Ui.lp(Ui.WRAP, Ui.WRAP, r = 8))
+        if (recipe.totalMinutes > 0) meta.addView(photoChip(Ui.recipeTime(recipe.totalMinutes), Icon.Kind.CLOCK), Ui.lp(Ui.WRAP, Ui.WRAP, r = 8))
         // Le nombre de personnes se règle au-dessus des ingrédients ; la pastille suit le réglage.
         if (recipe.servings > 0) servingsChip = photoChip("", Icon.Kind.PEOPLE).also { meta.addView(it, Ui.lp(Ui.WRAP, Ui.WRAP, r = 8)) }
         meta.addView(photoChip(when (recipe.difficulty) { 1 -> tr("Facile"); 2 -> tr("Moyen"); else -> tr("Difficile") }, Icon.Kind.STAR))
@@ -146,8 +146,6 @@ class RecipeScreen(a: MainActivity, val recipe: Recipe) : Screen(a) {
     private fun photoChip(label: String, icon: Icon.Kind): LinearLayout =
         Ui.chip(c, label, icon, Color.WHITE, PHOTO_CHIP, 15f)
 
-    /** « 45 min », « 1 h 30 », « 26 h 20 » : les longues durées (repos, marinade) se lisent mieux en heures. */
-    private fun minutes(m: Int): String = if (m < 60) "$m min" else if (m % 60 == 0) "${m / 60} h" else String.format("%d h %02d", m / 60, m % 60)
 
     private fun renderIngredients() {
         val ing = ingredientsBox

@@ -303,7 +303,7 @@ class RecipesScreen(
             if (u != null && usage == Usage.MOST) parts += if (u.count == 1) tr("1 fois") else tr("%d fois", u.count)
             if (u != null && usage == Usage.RECENT) parts += ago(u.lastMs)
             if (e.ratingCount > 0) parts += "★ " + String.format(I18n.locale, "%.1f", e.rating)
-            if (e.totalMinutes > 0) parts += "${e.totalMinutes} min"
+            if (e.totalMinutes > 0) parts += Ui.recipeTime(e.totalMinutes)
             if (e.category.isNotBlank()) parts += e.category
             meta.text = parts.joinToString(" · ")
             star.visibility = if (a.app.recipes.isFavorite(e.id)) View.VISIBLE else View.GONE

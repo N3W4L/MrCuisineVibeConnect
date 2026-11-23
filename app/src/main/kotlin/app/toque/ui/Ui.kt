@@ -135,6 +135,13 @@ object Ui {
             ellipsize = TextUtils.TruncateAt.END
         }
 
+    /** Durée de recette : « 45 min », « 2 h », « 26 h 20 » (les longs repos se lisent mieux en heures). */
+    fun recipeTime(m: Int): String = when {
+        m < 60 -> "$m min"
+        m % 60 == 0 -> "${m / 60} h"
+        else -> String.format(java.util.Locale.ROOT, "%d h %02d", m / 60, m % 60)
+    }
+
     fun ellipsize(t: TextView, lines: Int = 1): TextView {
         t.maxLines = lines
         t.ellipsize = TextUtils.TruncateAt.END
@@ -278,8 +285,8 @@ object Ui {
 
     fun clock(ms: Long): String {
         val s = (ms + 999) / 1000
-        return if (s >= 3600) String.format("%d:%02d:%02d", s / 3600, (s / 60) % 60, s % 60)
-        else String.format("%02d:%02d", s / 60, s % 60)
+        return if (s >= 3600) String.format(java.util.Locale.ROOT, "%d:%02d:%02d", s / 3600, (s / 60) % 60, s % 60)
+        else String.format(java.util.Locale.ROOT, "%02d:%02d", s / 60, s % 60)
     }
 
     fun duration(seconds: Int): String = when {

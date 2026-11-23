@@ -310,8 +310,8 @@ class MachineService : Service() {
 
         fun formatClock(ms: Long): String {
             val s = (ms + 999) / 1000
-            return if (s >= 3600) String.format("%d:%02d:%02d", s / 3600, (s / 60) % 60, s % 60)
-            else String.format("%02d:%02d", s / 60, s % 60)
+            return if (s >= 3600) String.format(java.util.Locale.ROOT, "%d:%02d:%02d", s / 3600, (s / 60) % 60, s % 60)
+            else String.format(java.util.Locale.ROOT, "%02d:%02d", s / 60, s % 60)
         }
     }
 }
