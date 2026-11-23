@@ -8,7 +8,7 @@
 # credential already stored for git (Git Credential Manager). It is never printed.
 param(
     [Parameter(Mandatory = $true)][string]$Apk,
-    [string]$Repo = "Wuki60/MrCuisineVibeConnect",
+    [string]$Repo = "N3W4L/MrCuisineVibeConnect",
     [switch]$RepoInfo,
     # Pre-release: on GitHub but not offered to robots (they read /releases/latest) until -Promote.
     [switch]$Prerelease,
