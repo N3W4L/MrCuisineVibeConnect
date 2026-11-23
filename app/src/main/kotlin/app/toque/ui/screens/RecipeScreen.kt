@@ -3,6 +3,7 @@ package app.toque.ui.screens
 import android.content.Context
 import android.text.InputType
 import android.util.TypedValue
+import android.graphics.Color
 import android.view.Gravity
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -69,26 +70,32 @@ class RecipeScreen(a: MainActivity, val recipe: Recipe) : Screen(a) {
             override fun getOutline(view: View, outline: android.graphics.Outline) =
                 outline.setRoundRect(0, 0, view.width, view.height, Ui.uf(24f))
         }
-        ImageLoader.load(img, a.app.recipes.imageFile(recipe.image), Ui.u(420))
-        left.addView(header, LinearLayout.LayoutParams(Ui.MATCH, Ui.u(170)))
+        ImageLoader.load(img, a.app.recipes.imageFile(recipe.image), Ui.u(480))
 
+        // Titre, durée, parts, difficulté et auteur posés sur la photo, au-dessus d'un dégradé sombre :
+        // lisibles sur n'importe quelle image, et la colonne garde sa place pour les ingrédients.
+        header.addView(View(c).apply {
+            background = android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.BOTTOM_TOP,
+                intArrayOf(0xE6000000.toInt(), 0x99000000.toInt(), 0x00000000))
+        }, Ui.flp())
+        val over = Ui.vertical(c)
+        over.setPadding(Ui.u(18), Ui.u(14), Ui.u(18), Ui.u(14))
+        over.addView(Ui.ellipsize(Ui.text(c, recipe.title, 24f, Color.WHITE, Ui.MEDIUM).apply { setLineSpacing(0f, 1.05f) }, 2))
         val meta = Ui.horizontal(c)
-        if (recipe.totalMinutes > 0) meta.addView(Ui.chip(c, "${recipe.totalMinutes} min", Icon.Kind.CLOCK), Ui.lp(Ui.WRAP, Ui.WRAP, r = 8))
-        // Le nombre de personnes se règle au-dessus des ingrédients.
-        if (recipe.servings > 0) servingsChip = Ui.chip(c, "", Icon.Kind.PEOPLE).also { meta.addView(it, Ui.lp(Ui.WRAP, Ui.WRAP, r = 8)) }
-        meta.addView(Ui.chip(c, when (recipe.difficulty) { 1 -> tr("Facile"); 2 -> tr("Moyen"); else -> tr("Difficile") }, Icon.Kind.STAR))
-        left.addView(meta, Ui.lp(t = 12))
-
-        // Auteur et note du site.
+        if (recipe.totalMinutes > 0) meta.addView(photoChip(minutes(recipe.totalMinutes), Icon.Kind.CLOCK), Ui.lp(Ui.WRAP, Ui.WRAP, r = 8))
+        // Le nombre de personnes se règle au-dessus des ingrédients ; la pastille suit le réglage.
+        if (recipe.servings > 0) servingsChip = photoChip("", Icon.Kind.PEOPLE).also { meta.addView(it, Ui.lp(Ui.WRAP, Ui.WRAP, r = 8)) }
+        meta.addView(photoChip(when (recipe.difficulty) { 1 -> tr("Facile"); 2 -> tr("Moyen"); else -> tr("Difficile") }, Icon.Kind.STAR))
+        over.addView(meta, Ui.lp(t = 8))
+        // Auteur et note du site, sur une ligne.
         val byline = ArrayList<String>()
         if (recipe.source == RecipeSource.USER) byline += tr("Ma recette")
         else if (recipe.author.isNotBlank()) byline += tr("Par %s", authorName(recipe.author))
-        if (recipe.language.isNotBlank()) byline += tr("Recette en %s", java.util.Locale.forLanguageTag(recipe.language).getDisplayLanguage(I18n.locale))
         if (recipe.ratingCount > 0) byline += "★ " + tr("%s/5 · %d notes", rating(recipe.rating), recipe.ratingCount)
-        // Une ligne chacun : sur une seule, la note était coupée (« 124… ») dès que l'auteur est long.
-        byline.forEachIndexed { i, line ->
-            left.addView(Ui.ellipsize(Ui.text(c, line, 16f, Ui.TEXT2)), Ui.lp(t = if (i == 0) 10 else 2))
-        }
+        if (recipe.language.isNotBlank()) byline += tr("Recette en %s", java.util.Locale.forLanguageTag(recipe.language).getDisplayLanguage(I18n.locale))
+        if (byline.isNotEmpty()) over.addView(Ui.ellipsize(Ui.text(c, byline.joinToString("  ·  "), 15f, 0xD9FFFFFF.toInt())), Ui.lp(t = 8))
+        header.addView(over, Ui.flp(Ui.MATCH, Ui.WRAP, Gravity.BOTTOM))
+        left.addView(header, LinearLayout.LayoutParams(Ui.MATCH, Ui.u(250)))
 
         val actions = Ui.horizontal(c)
         actions.addView(Ui.button(c, tr("Cuisiner"), Ui.Style.PRIMARY, Icon.Kind.PLAY, height = 66, textSize = 22f) {
@@ -135,26 +142,32 @@ class RecipeScreen(a: MainActivity, val recipe: Recipe) : Screen(a) {
 
     private var servingsChip: LinearLayout? = null
 
+    /** Pastille posée sur la photo : texte blanc sur un voile translucide. */
+    private fun photoChip(label: String, icon: Icon.Kind): LinearLayout =
+        Ui.chip(c, label, icon, Color.WHITE, PHOTO_CHIP, 15f)
+
+    /** « 45 min », « 1 h 30 », « 26 h 20 » : les longues durées (repos, marinade) se lisent mieux en heures. */
+    private fun minutes(m: Int): String = if (m < 60) "$m min" else if (m % 60 == 0) "${m / 60} h" else String.format("%d h %02d", m / 60, m % 60)
+
     private fun renderIngredients() {
         val ing = ingredientsBox
         ing.removeAllViews()
         servingsChip?.let { chip ->
             val changed = shown.servings != recipe.servings
             Ui.chipText(chip).text = people(shown.servings)
-            Ui.chipText(chip).setTextColor(if (changed) Ui.ACCENT else Ui.TEXT2)
-            (chip.getChildAt(0) as Icon).color = if (changed) Ui.ACCENT else Ui.TEXT2
-            chip.background = Ui.round(if (changed) Ui.ACCENT_DIM else Ui.SURFACE2, 40f)
+            val fg = if (changed) Ui.ON_ACCENT else Color.WHITE
+            Ui.chipText(chip).setTextColor(fg)
+            (chip.getChildAt(0) as Icon).color = fg
+            chip.background = Ui.round(if (changed) Ui.ACCENT else PHOTO_CHIP, 40f)
         }
-        ing.addView(section(tr("Ma note")))
-        if (adjustments.note.isBlank()) {
-            ing.addView(Ui.button(c, tr("Ajouter une note"), Ui.Style.GHOST, Icon.Kind.PLUS, height = 46, textSize = 16f) { editNote() },
-                Ui.lp(Ui.WRAP, Ui.WRAP, t = 8))
-        } else {
-            val note = Ui.text(c, adjustments.note, 17f, Ui.TEXT).apply { setLineSpacing(0f, 1.15f) }
-            note.background = Ui.pressable(Ui.round(Ui.ACCENT_DIM, 16f), 16f)
-            note.setPadding(Ui.u(14), Ui.u(10), Ui.u(14), Ui.u(10))
+        // Note personnelle déjà écrite : gardée en une ligne discrète (toucher pour la modifier).
+        // Plus de bloc « Ma note » ni de bouton d'ajout : la place va aux ingrédients.
+        if (adjustments.note.isNotBlank()) {
+            val note = Ui.ellipsize(Ui.text(c, "✎ " + adjustments.note, 16f, Ui.TEXT2), 2)
+            note.background = Ui.pressable(Ui.round(Ui.ACCENT_DIM, 14f), 14f)
+            note.setPadding(Ui.u(12), Ui.u(8), Ui.u(12), Ui.u(8))
             note.setOnClickListener { editNote() }
-            ing.addView(note, Ui.lp(t = 8))
+            ing.addView(note, Ui.lp(b = 4))
         }
         if (recipe.servings > 0) {
             val head = Ui.horizontal(c)
@@ -489,7 +502,7 @@ class RecipeScreen(a: MainActivity, val recipe: Recipe) : Screen(a) {
     private fun rating(v: Double): String = String.format(I18n.locale, "%.1f", v)
 
     private fun authorName(name: String): String =
-        if (name.equals("Monsieur Cuisine Official", ignoreCase = true)) tr("Monsieur Cuisine (recette officielle)") else name
+        if (name.equals("Monsieur Cuisine Official", ignoreCase = true)) "Monsieur Cuisine" else name
 
     private fun section(t: String): TextView =
         Ui.text(c, t.uppercase(), 15f, Ui.TEXT2, Ui.MEDIUM).apply { letterSpacing = 0.08f; setPadding(0, Ui.u(10), 0, 0) }
@@ -544,5 +557,10 @@ class RecipeScreen(a: MainActivity, val recipe: Recipe) : Screen(a) {
     override fun onKnobPress(): Boolean {
         a.push(CookScreen(a, shown, 0))
         return true
+    }
+
+    private companion object {
+        /** Voile des pastilles posées sur la photo. */
+        const val PHOTO_CHIP = 0x40FFFFFF
     }
 }
