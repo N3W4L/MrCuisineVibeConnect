@@ -126,8 +126,13 @@ class TopBar(private val a: MainActivity) : LinearLayout(a) {
         home.visibility = if (canGoBack) View.VISIBLE else View.GONE
     }
 
+    /** Pas encore de liaison depuis le démarrage : « Connexion… » plutôt que « Base absente ». */
+    private val bornMs = android.os.SystemClock.uptimeMillis()
+    private var everReady = false
+
     fun update(s: Snapshot) {
-        lid.visibility = if (s.hasSample && s.lidOpen) View.VISIBLE else View.GONE
+        // Le couvercle ouvert prend la place de « Prête » dans la même pastille (voir plus bas).
+        lid.visibility = View.GONE
         if (s.hasSample) {
             temp.visibility = View.VISIBLE
             // La base renvoie 0 sous sa plus basse température mesurable (37 °C sur le Connect) :
@@ -139,8 +144,12 @@ class TopBar(private val a: MainActivity) : LinearLayout(a) {
         } else temp.visibility = View.GONE
         val mode = a.prefs.mode
         val simulated = mode != Prefs.Mode.HARDWARE
+        if (s.link == LinkState.READY) everReady = true
+        val starting = !everReady && android.os.SystemClock.uptimeMillis() - bornMs < 30_000
+        val lidOpen = s.hasSample && s.lidOpen && !s.hasFault
         val (label, color) = when {
             s.hasFault -> tr("Alerte") to Ui.DANGER
+            lidOpen -> tr("Couvercle ouvert") to Ui.WARN
             s.link == LinkState.READY -> {
                 val label = when (mode) {
                     Prefs.Mode.DEMO -> tr("Démo · Prête")
@@ -149,13 +158,14 @@ class TopBar(private val a: MainActivity) : LinearLayout(a) {
                 }
                 label to (if (simulated) Ui.COOL else Ui.OK)
             }
-            s.link == LinkState.ARMING -> tr("Connexion…") to Ui.WARN
+            s.link == LinkState.ARMING || starting -> tr("Connexion…") to Ui.TEXT2
             s.link == LinkState.LOST -> tr("Liaison perdue") to Ui.DANGER
             else -> tr("Base absente") to Ui.TEXT3
         }
         Ui.chipText(link).text = label
         Ui.chipText(link).setTextColor(color)
-        (link.getChildAt(0) as Icon).color = color
+        (link.getChildAt(0) as Icon).let { it.set(if (lidOpen) Icon.Kind.LID else Icon.Kind.LINK); it.color = color }
+        link.background = Ui.round(if (lidOpen) Ui.WARN_DIM else Ui.SURFACE2, 40f)
     }
 }
 
