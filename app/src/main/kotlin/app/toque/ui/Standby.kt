@@ -128,11 +128,17 @@ class Standby(private val a: MainActivity, private val root: FrameLayout) {
             "off" -> KnobLight.start(0)
         }
         main.postDelayed(tick, 60_000)
+        // Une fois le fondu fini, l'écran s'éteint vraiment (sauf bol chaud : l'alerte reste lisible).
+        main.postDelayed(screenOff, 1_500)
     }
+
+    private val screenOff = Runnable { if (asleep && a.snapshot.actualTempC < 50) Backlight.turnOff() }
 
     private fun wake() {
         val v = view ?: return
         main.removeCallbacks(tick)
+        main.removeCallbacks(screenOff)
+        Backlight.turnOn()
         v.animate().cancel()
         root.removeView(v)
         view = null
@@ -151,6 +157,8 @@ class Standby(private val a: MainActivity, private val root: FrameLayout) {
             it.text = if (temp >= 50) tr("Bol chaud : %d °C", temp) else ""
             it.visibility = if (temp >= 50) View.VISIBLE else View.GONE
         }
+        // Bol chaud : écran au minimum pour lire l'alerte ; refroidi : écran éteint.
+        if (asleep) { if (temp >= 50) Backlight.turnOn() else Backlight.turnOff() }
     }
 
     /** Déplace un peu l'heure chaque minute, pour ne pas marquer l'écran. */
