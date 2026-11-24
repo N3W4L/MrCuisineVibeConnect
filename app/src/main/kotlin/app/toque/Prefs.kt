@@ -137,6 +137,13 @@ class Prefs(context: Context) {
             p.edit().putBoolean("sound", v).commit()
         }
 
+    /** Volume de tous les sons de Toque, de 5 à 100 %. */
+    var soundVolume: Int
+        get() = p.getInt("soundVolume", 80).coerceIn(5, 100)
+        set(v) {
+            p.edit().putInt("soundVolume", v.coerceIn(5, 100)).commit()
+        }
+
     /** Jeu de sons (voir ui.SoundPacks.Pack) : « classic » par défaut, les sons d'origine. */
     var soundPack: String
         get() = p.getString("soundPack", "classic") ?: "classic"

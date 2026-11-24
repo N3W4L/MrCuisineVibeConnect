@@ -88,7 +88,7 @@ class MainActivity : Activity() {
         root.background = Ui.background()
         val column = Ui.vertical(this)
         topBar = TopBar(this)
-        column.addView(topBar, Ui.lp(Ui.MATCH, Ui.u(60)))
+        column.addView(topBar, Ui.lp(Ui.MATCH, Ui.u(66)))
         content = FrameLayout(this)
         column.addView(content, Ui.lp(Ui.MATCH, 0, 1f))
         machineBar = MachineBar(this)
@@ -102,10 +102,7 @@ class MainActivity : Activity() {
         updates = UpdateAlert(this)
         standby.onWake = { updates.onWake() }
 
-        try {
-            tone = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 85)
-        } catch (_: RuntimeException) {
-        }
+        applyVolume()
 
         app.machine.connect()
         app.recipes.load()
@@ -437,6 +434,17 @@ class MainActivity : Activity() {
     }
 
     /** Fin de programme (1-2 coups) ou alerte (3) : bips d'Android en Classique, son du jeu sinon. */
+    /** Volume des sons : celui des jeux de sons et celui des bips d'origine (ToneGenerator). */
+    fun applyVolume() {
+        Sounds.volume = prefs.soundVolume / 100f
+        tone?.release()
+        tone = try {
+            ToneGenerator(AudioManager.STREAM_NOTIFICATION, (prefs.soundVolume * 0.9f).toInt().coerceIn(5, 100))
+        } catch (_: RuntimeException) {
+            null
+        }
+    }
+
     fun chime(times: Int = 1) {
         if (!prefs.sound) return
         if (pack != SoundPacks.Pack.CLASSIC) {

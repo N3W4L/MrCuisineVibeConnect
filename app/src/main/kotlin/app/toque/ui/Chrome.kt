@@ -71,14 +71,14 @@ class TopBar(private val a: MainActivity) : LinearLayout(a) {
         setPadding(Ui.u(10), 0, Ui.u(18), 0)
         // Transparente : le dégradé du fond passe aussi derrière la barre du haut.
         roundButton(back) { a.back() }
-        addView(back, LayoutParams(Ui.u(52), Ui.u(52)))
+        addView(back, LayoutParams(Ui.u(60), Ui.u(60)))
         addView(titleView, LayoutParams(0, Ui.WRAP, 1f).apply { leftMargin = Ui.u(6) })
         addView(lid, Ui.lp(Ui.WRAP, Ui.WRAP, r = 10))
         addView(temp, Ui.lp(Ui.WRAP, Ui.WRAP, r = 10))
         addView(link, Ui.lp(Ui.WRAP, Ui.WRAP, r = 10))
         addView(clock, Ui.lp(Ui.WRAP, Ui.WRAP, r = 8))
         roundButton(home) { a.home() }
-        addView(home, LayoutParams(Ui.u(52), Ui.u(52)))
+        addView(home, LayoutParams(Ui.u(60), Ui.u(60)))
         lid.visibility = View.GONE
         temp.visibility = View.GONE
         // Accès caché aux réglages Android : 5 appuis rapides sur l'heure.
@@ -92,11 +92,11 @@ class TopBar(private val a: MainActivity) : LinearLayout(a) {
         }
     }
 
-    /** Bouton rond de 44 au centre d'une zone tactile de 52, de la même famille que les pastilles ; l'icône fait 26. */
+    /** Bouton rond de 54 au centre d'une zone tactile de 60, de la même famille que les pastilles ; l'icône fait 28. */
     private fun roundButton(icon: Icon, onClick: () -> Unit) {
-        icon.background = InsetDrawable(Ui.pressable(Ui.round(Ui.SURFACE2, 22f, Ui.STROKE, 1f), 22f), Ui.u(4))
+        icon.background = InsetDrawable(Ui.pressable(Ui.round(Ui.SURFACE2, 27f, Ui.STROKE, 1f), 27f), Ui.u(3))
         // Après le fond : un fond qui porte une marge impose sinon la sienne à la vue.
-        icon.setPadding(Ui.u(13), Ui.u(13), Ui.u(13), Ui.u(13))
+        icon.setPadding(Ui.u(16), Ui.u(16), Ui.u(16), Ui.u(16))
         icon.setOnClickListener { onClick() }
     }
 

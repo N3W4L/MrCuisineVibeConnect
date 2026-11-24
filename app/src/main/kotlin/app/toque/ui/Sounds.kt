@@ -60,6 +60,9 @@ object Sounds {
     fun playLater(urgentSound: Boolean, render: () -> ShortArray?) =
         (if (urgentSound) urgent else player).execute { render()?.let { playNow(it) } }
 
+    /** Volume de 0 à 1 (Réglages › Apparence › Sons), appliqué à chaque son joué. */
+    @Volatile var volume = 0.8f
+
     /** Fil des sons : à appeler depuis [player] seulement. */
     private fun playNow(pcm: ShortArray) {
         if (pcm.isEmpty()) return
@@ -72,6 +75,8 @@ object Sounds {
         }
         try {
             track.write(pcm, 0, pcm.size)
+            @Suppress("DEPRECATION")
+            track.setStereoVolume(volume, volume)
             track.play()
             Thread.sleep(pcm.size * 1000L / RATE + 100)
         } catch (_: Exception) {
