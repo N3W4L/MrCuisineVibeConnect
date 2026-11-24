@@ -110,7 +110,7 @@
   "Avancé": "Erweitert",
   "Volume": "Lautstärke",
   "Anti-rebond du bouton rotatif": "Entprellung des Drehknopfs",
-  "Le bouton envoie parfois un cran à l'envers au milieu d'un tour. Un cran dans l'autre sens trop rapproché du précédent est ignoré ; après une courte pause, changer de sens marche tout de suite. « Fort » filtre davantage, mais demande une pause plus longue pour repartir dans l'autre sens.": "Der Knopf sendet mitten in einer Drehung manchmal einen Schritt in die Gegenrichtung. Ein zu schnell folgender Schritt in die andere Richtung wird ignoriert; nach einer kurzen Pause funktioniert der Richtungswechsel sofort. „Stark“ filtert mehr, braucht aber eine längere Pause für den Richtungswechsel.",
+  "Tourné vite, le bouton du robot se trompe souvent de sens. Toque garde le sens du début de chaque geste : pour repartir dans l'autre sens, marquez une courte pause (une demi-seconde en « Normal »). « Léger » demande une pause plus courte, « Fort » protège mieux les tours très rapides.": "Schnell gedreht, verwechselt der Drehknopf des Roboters oft die Richtung. Toque behält die Richtung vom Beginn jeder Bewegung: Für die Gegenrichtung kurz innehalten (eine halbe Sekunde bei „Normal“). „Leicht“ braucht eine kürzere Pause, „Stark“ schützt sehr schnelle Drehungen besser.",
   "Léger": "Leicht",
   "Fort": "Stark",
   "Désactivé": "Aus",

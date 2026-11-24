@@ -354,19 +354,22 @@ class MainActivity : Activity() {
     }
 
     /**
-     * Anti-rebond du bouton rotatif : son encodeur envoie parfois un cran à l'envers au milieu d'un
-     * tour (droite, gauche, droite…). Un cran dans l'autre sens moins de Prefs.knobReverseMs après le
-     * précédent est ignoré ; après une vraie pause, changer de sens marche tout de suite.
+     * Sens du bouton rotatif. Relevé sur le robot : tourné lentement, chaque cran arrive dans le bon
+     * sens ; tourné vite, son lecteur se trompe sur la plupart des crans (5 sur 6 à l'envers), mais
+     * le premier cran du geste est toujours juste. Le premier cran après une pause fixe donc le sens,
+     * et les crans rapprochés qui suivent comptent tous dans ce sens. Pour repartir dans l'autre
+     * sens, une courte pause suffit (Réglages › Général › Anti-rebond ; 0 = crans bruts).
      */
     private var knobDir = 0
     private var knobAt = 0L
 
-    private fun knobAccepts(dir: Int): Boolean {
+    /** Sens retenu pour ce cran (+1 droite, -1 gauche). */
+    private fun knobDirection(reported: Int): Int {
         val now = android.os.SystemClock.uptimeMillis()
-        if (knobDir != 0 && dir != knobDir && now - knobAt < prefs.knobReverseMs) return false
-        knobDir = dir
+        val pause = prefs.knobReverseMs
+        if (pause <= 0 || knobDir == 0 || now - knobAt > pause) knobDir = reported
         knobAt = now
-        return true
+        return knobDir
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
@@ -393,9 +396,10 @@ class MainActivity : Activity() {
             val s = current
             if ((left || right || press) && !prefs.knobSetupDone) prefs.knobSetupDone = true
             if (s != null && currentFocus !is android.widget.EditText) {
-                if ((left || right) && !knobAccepts(if (right) 1 else -1)) return true
-                if (left && s.onKnob(-1)) { click(); return true }
-                if (right && s.onKnob(1)) { click(); return true }
+                if (left || right) {
+                    val dir = knobDirection(if (right) 1 else -1)
+                    if (s.onKnob(dir)) { click(); return true }
+                }
                 if (press && s.onKnobPress()) { click(); return true }
             }
         }
@@ -411,8 +415,7 @@ class MainActivity : Activity() {
             if (v != 0f && now - lastKnobMs > 40) {
                 lastKnobMs = now
                 if (!prefs.knobSetupDone) prefs.knobSetupDone = true
-                if (!knobAccepts(if (v > 0) 1 else -1)) return true
-                if (current?.onKnob(if (v > 0) 1 else -1) == true) { click(); return true }
+                if (current?.onKnob(knobDirection(if (v > 0) 1 else -1)) == true) { click(); return true }
             }
         }
         return super.dispatchGenericMotionEvent(event)

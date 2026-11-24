@@ -110,7 +110,7 @@
   "Avancé": "Додатково",
   "Volume": "Гучність",
   "Anti-rebond du bouton rotatif": "Фільтр брязкоту ручки",
-  "Le bouton envoie parfois un cran à l'envers au milieu d'un tour. Un cran dans l'autre sens trop rapproché du précédent est ignoré ; après une courte pause, changer de sens marche tout de suite. « Fort » filtre davantage, mais demande une pause plus longue pour repartir dans l'autre sens.": "Іноді ручка надсилає крок назад посеред повороту. Крок у протилежний бік, надто близький до попереднього, ігнорується; після короткої паузи зміна напрямку працює одразу. «Сильний» фільтрує більше, але потребує довшої паузи для зміни напрямку.",
+  "Tourné vite, le bouton du robot se trompe souvent de sens. Toque garde le sens du début de chaque geste : pour repartir dans l'autre sens, marquez une courte pause (une demi-seconde en « Normal »). « Léger » demande une pause plus courte, « Fort » protège mieux les tours très rapides.": "При швидкому обертанні ручка робота часто плутає напрямок. Toque зберігає напрямок з початку кожного жесту: щоб повернути назад, зробіть коротку паузу (пів секунди в режимі «Звичайний»). «Легкий» потребує коротшої паузи, «Сильний» краще захищає дуже швидкі оберти.",
   "Léger": "Легкий",
   "Fort": "Сильний",
   "Désactivé": "Вимкнено",

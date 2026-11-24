@@ -110,7 +110,7 @@
   "Avancé": "Avançat",
   "Volume": "Volum",
   "Anti-rebond du bouton rotatif": "Antirebot del botó giratori",
-  "Le bouton envoie parfois un cran à l'envers au milieu d'un tour. Un cran dans l'autre sens trop rapproché du précédent est ignoré ; après une courte pause, changer de sens marche tout de suite. « Fort » filtre davantage, mais demande une pause plus longue pour repartir dans l'autre sens.": "De vegades el botó envia un pas al revés enmig d'un gir. Un pas en sentit contrari massa a prop de l'anterior s'ignora; després d'una pausa curta, canviar de sentit funciona de seguida. «Fort» filtra més, però demana una pausa més llarga per tornar enrere.",
+  "Tourné vite, le bouton du robot se trompe souvent de sens. Toque garde le sens du début de chaque geste : pour repartir dans l'autre sens, marquez une courte pause (une demi-seconde en « Normal »). « Léger » demande une pause plus courte, « Fort » protège mieux les tours très rapides.": "Quan es gira de pressa, el botó del robot sovint s'equivoca de sentit. Toque manté el sentit del començament de cada gest: per tornar enrere, feu una pausa curta (mig segon en «Normal»). «Lleuger» demana una pausa més curta, «Fort» protegeix millor els girs molt ràpids.",
   "Léger": "Lleuger",
   "Fort": "Fort",
   "Désactivé": "Desactivat",

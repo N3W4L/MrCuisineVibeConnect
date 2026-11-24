@@ -137,11 +137,15 @@ class Prefs(context: Context) {
             p.edit().putBoolean("sound", v).commit()
         }
 
-    /** Anti-rebond du bouton rotatif (ms) : un cran à l'envers plus rapide est ignoré ; 0 = désactivé. */
+    /**
+     * Bouton rotatif (ms) : pause qui sépare deux gestes. Le premier cran d'un geste en fixe le sens,
+     * les crans rapprochés qui suivent le gardent (le lecteur du robot se trompe quand on tourne vite).
+     * 500 ms : réglé sur des relevés du robot ; 0 = crans bruts.
+     */
     var knobReverseMs: Int
-        get() = p.getInt("knobReverseMs", 180)
+        get() = p.getInt("knobLockMs", 500)
         set(v) {
-            p.edit().putInt("knobReverseMs", v).commit()
+            p.edit().putInt("knobLockMs", v).commit()
         }
 
     /** Volume de tous les sons de Toque, de 5 à 100 %. */
