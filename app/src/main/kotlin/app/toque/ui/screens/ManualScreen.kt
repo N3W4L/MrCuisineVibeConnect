@@ -465,7 +465,10 @@ class ManualScreen(
         (s.turboActive || s.kind?.name == "MANUAL" && s.state != null)
 
     override fun onKnob(delta: Int): Boolean {
-        change(selected, delta)
+        // L'arc de vitesse est à droite et monte du bas : tourner le bouton vers la droite (sens
+        // horaire) descend le long de cet arc, donc baisse la vitesse. La température, à gauche,
+        // monte dans le sens horaire : pas d'inversion.
+        change(selected, if (selected == 2) -delta else delta)
         return true
     }
 
