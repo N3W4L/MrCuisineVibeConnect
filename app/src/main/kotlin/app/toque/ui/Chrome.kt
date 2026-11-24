@@ -117,7 +117,8 @@ class TopBar(private val a: MainActivity) : LinearLayout(a) {
         lid.visibility = if (s.hasSample && s.lidOpen) View.VISIBLE else View.GONE
         if (s.hasSample) {
             temp.visibility = View.VISIBLE
-            Ui.chipText(temp).text = "${s.actualTempC} °C"
+            // La base renvoie 0 sous sa plus basse température mesurable (37 °C sur le Connect).
+            Ui.chipText(temp).text = if (s.actualTempC <= 0) "< ${app.toque.core.robot.RobotProfiles.active.capabilities.temperaturesC.first()} °C" else "${s.actualTempC} °C"
             val col = if (s.actualTempC >= 40) Ui.tempColor(s.actualTempC) else Ui.TEXT2
             Ui.chipText(temp).setTextColor(col)
             (temp.getChildAt(0) as Icon).color = col

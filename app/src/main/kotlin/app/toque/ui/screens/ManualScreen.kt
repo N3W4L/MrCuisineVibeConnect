@@ -378,8 +378,14 @@ class ManualScreen(
         k.tempOkTo = if (speed == 0) Limits.MAX_TEMP_LEVEL_NO_STIR / 19f else 1f
         k.tempText = if (level == 0) null else "$t°"
         val measured = onPick == null && s.hasSample
-        k.bowlFrac = if (measured) levelFraction(s.actualTempC) else null
-        k.bowlText = if (measured) tr("Bol %d °C", s.actualTempC) else ""
+        // Sous sa plus basse température (37 °C sur le Connect), la base renvoie 0 : « Bol < 37 °C ».
+        val cold = measured && s.actualTempC <= 0
+        k.bowlFrac = if (measured && !cold) levelFraction(s.actualTempC) else null
+        k.bowlText = when {
+            !measured -> ""
+            cold -> tr("Bol < %d °C", caps.temperaturesC.first())
+            else -> tr("Bol %d °C", s.actualTempC)
+        }
         val (max, _) = speedLimit()
         k.speedFrac = speed / 10f
         k.speedOkFrom = minSpeed / 10f
