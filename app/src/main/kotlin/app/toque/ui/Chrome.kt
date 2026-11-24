@@ -64,12 +64,14 @@ class TopBar(private val a: MainActivity) : LinearLayout(a) {
             // fausse (2010, 01:00 au démarrage) trompe plus qu'une heure absente.
             val show = TimeSync.showClock(a)
             if (show) Ui.chipText(clock).text = MainActivity.now()
-            clock.visibility = if (show) View.VISIBLE else View.GONE
+            // Sur l'accueil, la grande horloge suffit : pas de pastille en double.
+            clock.visibility = if (show && !atHome) View.VISIBLE else View.GONE
             handler.postDelayed(this, if (show) 10_000 else 2_000)
         }
     }
     private var adminTaps = 0
     private var adminFirst = 0L
+    private var atHome = true
 
     init {
         orientation = HORIZONTAL
@@ -115,6 +117,11 @@ class TopBar(private val a: MainActivity) : LinearLayout(a) {
 
     fun setTitle(t: String, canGoBack: Boolean) {
         titleView.text = t
+        atHome = !canGoBack
+        if (atHome) clock.visibility = View.GONE else if (TimeSync.showClock(a)) {
+            Ui.chipText(clock).text = MainActivity.now()
+            clock.visibility = View.VISIBLE
+        }
         back.visibility = if (canGoBack) View.VISIBLE else View.INVISIBLE
         home.visibility = if (canGoBack) View.VISIBLE else View.GONE
     }
