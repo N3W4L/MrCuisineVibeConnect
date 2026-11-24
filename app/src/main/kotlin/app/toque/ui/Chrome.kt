@@ -34,6 +34,8 @@ abstract class Screen(val a: MainActivity) {
     open fun ownsFinishSound(e: MachineEvent): Boolean = false
     open fun onKnob(delta: Int): Boolean = false
     open fun onKnobPress(): Boolean = false
+    /** Écran qui montre lui-même la cuisson en cours (temps, réglages, pause, arrêt) : pas de bandeau en bas. */
+    open fun hidesMachineBar(s: Snapshot): Boolean = false
     /** false : l'écran demande d'abord confirmation (modifications non enregistrées) et appelle [proceed] si on confirme. */
     open fun canLeave(proceed: () -> Unit): Boolean = true
     /** Empêche la mise en veille tant que cet écran est affiché (balance). */
@@ -237,10 +239,10 @@ class MachineBar(private val a: MainActivity) : FrameLayout(a) {
         } else a.machine.pause { a.refusal(it) }
     }
 
-    fun update(s: Snapshot) {
+    fun update(s: Snapshot, hideJob: Boolean = false) {
         last = s
         val st = s.state
-        val showJob = s.jobActive || s.turboActive
+        val showJob = (s.jobActive || s.turboActive) && !hideJob
         visibility = if (showJob || s.hasFault) View.VISIBLE else View.GONE
         faultRow.visibility = if (s.hasFault) View.VISIBLE else View.GONE
         jobRow.visibility = if (!s.hasFault && showJob) View.VISIBLE else View.GONE

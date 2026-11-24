@@ -234,7 +234,7 @@ class MainActivity : Activity() {
         super.onStart()
         unsubscribe = app.machine.onSnapshot { s ->
             topBar.update(s)
-            machineBar.update(s)
+            machineBar.update(s, stack.lastOrNull()?.hidesMachineBar(s) == true)
             stack.lastOrNull()?.onSnapshot(s)
             standby.onSnapshot(s)
         }

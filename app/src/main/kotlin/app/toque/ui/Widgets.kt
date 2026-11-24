@@ -171,18 +171,25 @@ class TempRing(c: Context) : View(c) {
 }
 
 /** Bouton « maintenir pour Turbo ». */
-class HoldButton(c: Context, label: String, private val onDown: () -> Unit, private val onUp: () -> Unit) : LinearLayout(c) {
+class HoldButton(c: Context, label: String, private val onDown: () -> Unit, private val onUp: () -> Unit,
+                 /** Éclair seul, sur fond à filet (cuisson manuelle) ; sinon éclair + texte sur fond plein. */
+                 private val iconOnly: Boolean = false) : LinearLayout(c) {
     private val text: TextView
+    private val bolt: Icon
+
+    private fun rest() = if (iconOnly) Ui.round(0, 14f, Ui.STROKE, 1.5f) else Ui.round(Ui.SURFACE3, 32f)
 
     init {
         orientation = HORIZONTAL
         setGravity(Gravity.CENTER)
         setPadding(Ui.u(22), 0, Ui.u(22), 0)
         minimumHeight = Ui.u(64)
-        background = Ui.round(Ui.SURFACE3, 32f)
-        addView(Icon(c, Icon.Kind.BOLT, Ui.WARN), LayoutParams(Ui.u(26), Ui.u(26)).apply { rightMargin = Ui.u(10) })
+        background = rest()
+        bolt = Icon(c, Icon.Kind.BOLT, if (iconOnly) Ui.TEXT else Ui.WARN)
+        val s = if (iconOnly) Ui.u(34) else Ui.u(26)
+        addView(bolt, LayoutParams(s, s).apply { if (!iconOnly) rightMargin = Ui.u(10) })
         text = Ui.text(c, label, 20f, Ui.TEXT, Ui.MEDIUM)
-        addView(text)
+        if (!iconOnly) addView(text)
         isClickable = true
     }
 
@@ -190,13 +197,15 @@ class HoldButton(c: Context, label: String, private val onDown: () -> Unit, priv
         if (!isEnabled) return false
         when (e.action) {
             MotionEvent.ACTION_DOWN -> {
-                background = Ui.round(Ui.WARN, 32f)
+                background = Ui.round(Ui.WARN, if (iconOnly) 14f else 32f)
                 text.setTextColor(if (Ui.LIGHT_THEME) 0xFFFFFFFF.toInt() else 0xFF1A1405.toInt())
+                if (iconOnly) bolt.color = if (Ui.LIGHT_THEME) 0xFFFFFFFF.toInt() else 0xFF1A1405.toInt()
                 onDown()
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                background = Ui.round(Ui.SURFACE3, 32f)
+                background = rest()
                 text.setTextColor(Ui.TEXT)
+                if (iconOnly) bolt.color = Ui.TEXT
                 onUp()
             }
         }
