@@ -129,6 +129,7 @@ class ManualScreen(
         if (onPick != null) turbo.visibility = View.INVISIBLE
         // Pendant la cuisson, Turbo (indisponible) laisse sa place à Arrêter.
         stopBtn = Ui.button(c, "", Ui.Style.DANGER, Icon.Kind.STOP, height = 72) { a.machine.stop() }
+        stopBtn.background = Ui.pressable(Ui.round(Ui.DANGER, 14f), 14f)
         stopBtn.contentDescription = tr("Arrêter")
         stopBtn.visibility = View.GONE
         mid.addView(stopBtn, LinearLayout.LayoutParams(Ui.u(150), Ui.u(72)))
@@ -139,6 +140,8 @@ class ManualScreen(
         rightCol.addView(accToggle, Ui.lp(Ui.MATCH, Ui.u(52), b = 22))
         startBtn = if (onPick != null) Ui.button(c, tr("Utiliser ce réglage"), Ui.Style.PRIMARY, Icon.Kind.CHECK, height = 72, textSize = 20f) { start() }
         else Ui.button(c, tr("Démarrer"), Ui.Style.PRIMARY, Icon.Kind.PLAY, height = 72, textSize = 22f) { start() }
+        // Mêmes coins que Balance, Turbo et les interrupteurs (et non une pilule).
+        startBtn.background = Ui.pressable(Ui.round(Ui.ACCENT, 14f), 14f)
         rightCol.addView(startBtn, Ui.lp(Ui.MATCH, Ui.u(72)))
         bottom.addView(rightCol, LinearLayout.LayoutParams(0, Ui.WRAP, 0.25f))
         root.addView(bottom, FrameLayout.LayoutParams(Ui.MATCH, Ui.WRAP, Gravity.BOTTOM))
