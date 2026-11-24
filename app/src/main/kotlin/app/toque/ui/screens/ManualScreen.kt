@@ -62,6 +62,7 @@ class ManualScreen(
 
     private lateinit var cockpit: Cockpit
     private lateinit var stopBtn: LinearLayout
+    private var clearing = false
     private lateinit var dirToggle: TwoWay
     private lateinit var accToggle: TwoWay
     private val hideNotice = Runnable {
@@ -401,6 +402,14 @@ class ManualScreen(
     override fun onSnapshot(s: Snapshot) {
         weight.text = if (s.hasSample) tr("Balance : %d g", s.weightG) else tr("Base non connectée")
         if (onPick != null) return
+        // Fin de cuisson : « Terminé » sous la durée, puis la cuisson est rangée d'elle-même
+        // (plus de bouton OK à toucher, le bandeau du bas n'apparaît pas ici).
+        val ended = s.kind?.name == "MANUAL" && (s.state == JobState.FINISHED || s.state == JobState.ABORTED)
+        if (ended && !clearing) {
+            clearing = true
+            if (s.state == JobState.FINISHED) notice(tr("Terminé"), info = true)
+            cockpit.postDelayed({ a.machine.clearFinished(); clearing = false }, 2_500)
+        }
         val manualJob = s.kind?.name == "MANUAL" && (s.state == JobState.RUNNING || s.state == JobState.STARTING || s.state == JobState.PAUSED)
         live = manualJob && s.state != JobState.PAUSED
         accToggle.alpha = if (live) 0.35f else 1f
@@ -445,8 +454,9 @@ class ManualScreen(
     /** Rappel affiché quand rien ne s'oppose au démarrage : sans mélange, rien ne décolle le fond du bol. */
     private fun idleHint(): String = if (speed == 0 && tempLevel > 0) tr("Sans mélange : surveillez la cuisson") else ""
 
+    // Toute la vie d'une cuisson manuelle se voit ici, fin comprise : pas de bandeau en bas.
     override fun hidesMachineBar(s: Snapshot): Boolean = onPick == null &&
-        (s.turboActive || s.kind?.name == "MANUAL" && (s.state == JobState.RUNNING || s.state == JobState.STARTING || s.state == JobState.PAUSED))
+        (s.turboActive || s.kind?.name == "MANUAL" && s.state != null)
 
     override fun onKnob(delta: Int): Boolean {
         change(selected, delta)
