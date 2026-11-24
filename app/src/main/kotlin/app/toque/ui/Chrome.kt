@@ -43,13 +43,19 @@ abstract class Screen(val a: MainActivity) {
 }
 
 /** Barre supérieure : retour, titre, état de la base, heure. */
+/** Température affichée tant que la base ne mesure rien (sous 37 °C) : celle d'une cuisine. */
+const val ROOM_C = 21
+
 class TopBar(private val a: MainActivity) : LinearLayout(a) {
     private val back = Icon(a, Icon.Kind.BACK, Ui.TEXT)
-    private val titleView = Ui.ellipsize(Ui.text(a, "", 24f, Ui.TEXT, Ui.MEDIUM))
-    private val temp = Ui.chip(a, "", Icon.Kind.THERMO, Ui.TEXT2)
-    private val lid = Ui.chip(a, tr("Couvercle ouvert"), Icon.Kind.LID, Ui.WARN, Ui.WARN_DIM)
-    private val link = Ui.chip(a, "", Icon.Kind.LINK, Ui.TEXT2)
-    private val clock = Ui.chip(a, "", Icon.Kind.CLOCK, Ui.TEXT)
+    private val titleView = Ui.ellipsize(Ui.text(a, "", 26f, Ui.TEXT, Ui.MEDIUM))
+    // Pastilles de la même hauteur que les boutons Retour et Accueil (66), en grand texte.
+    private val temp = bigChip(Ui.chip(a, "", Icon.Kind.THERMO, Ui.TEXT2, size = 21f))
+    private val lid = bigChip(Ui.chip(a, tr("Couvercle ouvert"), Icon.Kind.LID, Ui.WARN, Ui.WARN_DIM, 21f))
+    private val link = bigChip(Ui.chip(a, "", Icon.Kind.LINK, Ui.TEXT2, size = 21f))
+    private val clock = bigChip(Ui.chip(a, "", Icon.Kind.CLOCK, Ui.TEXT, size = 21f))
+
+    private fun bigChip(chip: LinearLayout): LinearLayout = chip.apply { setPadding(Ui.u(18), 0, Ui.u(20), 0) }
     private val home = Icon(a, Icon.Kind.HOME, Ui.TEXT)
     private val handler = Handler(Looper.getMainLooper())
     private val tick = object : Runnable {
@@ -71,14 +77,14 @@ class TopBar(private val a: MainActivity) : LinearLayout(a) {
         setPadding(Ui.u(10), 0, Ui.u(18), 0)
         // Transparente : le dégradé du fond passe aussi derrière la barre du haut.
         roundButton(back) { a.back() }
-        addView(back, LayoutParams(Ui.u(60), Ui.u(60)))
+        addView(back, LayoutParams(Ui.u(72), Ui.u(72)))
         addView(titleView, LayoutParams(0, Ui.WRAP, 1f).apply { leftMargin = Ui.u(6) })
-        addView(lid, Ui.lp(Ui.WRAP, Ui.WRAP, r = 10))
-        addView(temp, Ui.lp(Ui.WRAP, Ui.WRAP, r = 10))
-        addView(link, Ui.lp(Ui.WRAP, Ui.WRAP, r = 10))
-        addView(clock, Ui.lp(Ui.WRAP, Ui.WRAP, r = 8))
+        addView(lid, Ui.lp(Ui.WRAP, Ui.u(66), r = 10))
+        addView(temp, Ui.lp(Ui.WRAP, Ui.u(66), r = 10))
+        addView(link, Ui.lp(Ui.WRAP, Ui.u(66), r = 10))
+        addView(clock, Ui.lp(Ui.WRAP, Ui.u(66), r = 10))
         roundButton(home) { a.home() }
-        addView(home, LayoutParams(Ui.u(60), Ui.u(60)))
+        addView(home, LayoutParams(Ui.u(72), Ui.u(72)))
         lid.visibility = View.GONE
         temp.visibility = View.GONE
         // Accès caché aux réglages Android : 5 appuis rapides sur l'heure.
@@ -92,11 +98,11 @@ class TopBar(private val a: MainActivity) : LinearLayout(a) {
         }
     }
 
-    /** Bouton rond de 54 au centre d'une zone tactile de 60, de la même famille que les pastilles ; l'icône fait 28. */
+    /** Bouton rond de 66 au centre d'une zone tactile de 72, de la même famille que les pastilles ; l'icône fait 32. */
     private fun roundButton(icon: Icon, onClick: () -> Unit) {
-        icon.background = InsetDrawable(Ui.pressable(Ui.round(Ui.SURFACE2, 27f, Ui.STROKE, 1f), 27f), Ui.u(3))
+        icon.background = InsetDrawable(Ui.pressable(Ui.round(Ui.SURFACE2, 33f, Ui.STROKE, 1f), 33f), Ui.u(3))
         // Après le fond : un fond qui porte une marge impose sinon la sienne à la vue.
-        icon.setPadding(Ui.u(16), Ui.u(16), Ui.u(16), Ui.u(16))
+        icon.setPadding(Ui.u(20), Ui.u(20), Ui.u(20), Ui.u(20))
         icon.setOnClickListener { onClick() }
     }
 
@@ -117,8 +123,9 @@ class TopBar(private val a: MainActivity) : LinearLayout(a) {
         lid.visibility = if (s.hasSample && s.lidOpen) View.VISIBLE else View.GONE
         if (s.hasSample) {
             temp.visibility = View.VISIBLE
-            // La base renvoie 0 sous sa plus basse température mesurable (37 °C sur le Connect).
-            Ui.chipText(temp).text = if (s.actualTempC <= 0) "< ${app.toque.core.robot.RobotProfiles.active.capabilities.temperaturesC.first()} °C" else "${s.actualTempC} °C"
+            // La base renvoie 0 sous sa plus basse température mesurable (37 °C sur le Connect) :
+            // on affiche alors la température d'une cuisine (21 °C), puis la vraie dès qu'elle arrive.
+            Ui.chipText(temp).text = "${if (s.actualTempC <= 0) ROOM_C else s.actualTempC} °C"
             val col = if (s.actualTempC >= 40) Ui.tempColor(s.actualTempC) else Ui.TEXT2
             Ui.chipText(temp).setTextColor(col)
             (temp.getChildAt(0) as Icon).color = col

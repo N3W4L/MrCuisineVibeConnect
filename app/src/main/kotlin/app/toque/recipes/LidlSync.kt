@@ -58,6 +58,22 @@ class LidlSync(private val context: Context, private val prefs: Prefs, private v
         return r
     }
 
+    /**
+     * Écran d'accueil d'Android : l'appli d'origine, appli système, y passe toujours devant Toque.
+     * Couper son activité d'accueil (désactiver = elle ne s'ouvre plus d'elle-même) laisse Toque
+     * seul écran d'accueil : au démarrage, après une mise à jour, sur la touche Accueil.
+     * Rétablie pour l'ouvrir (openVendorApp) et pour y revenir (restoreVendor, restore.sh).
+     */
+    fun setVendorHome(enabled: Boolean): Boolean {
+        val activity = try {
+            context.packageManager.getPackageInfo(pkg, PackageManager.GET_ACTIVITIES or PackageManager.GET_DISABLED_COMPONENTS)
+                .activities?.map { it.name }?.firstOrNull { it.endsWith("MainActivity") }
+        } catch (_: PackageManager.NameNotFoundException) {
+            null
+        } ?: return false
+        return su("pm ${if (enabled) "enable" else "disable"} $pkg/$activity").ok
+    }
+
     /** Coupe (ou rétablit) l'accès de l'appli d'origine au moteur. */
     fun setVendorHardware(enabled: Boolean): Boolean {
         val c = components().hardwareService ?: return false

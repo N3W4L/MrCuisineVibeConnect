@@ -9,6 +9,13 @@ am force-stop app.toque
 for P in de.silpion.mc2 com.tecpal.device.mc30; do
   pm path "$P" >/dev/null 2>&1 || continue
   pm enable "$P" >/dev/null 2>&1
+  # Its home screen activity, switched off by Toque so that Toque stays the robot's home screen.
+  for c in $(dumpsys package "$P" | $BB grep -oE '[A-Za-z0-9_./$]*MainActivity' | $BB sort -u); do
+    case "$c" in
+      */*) pm enable "$c" >/dev/null 2>&1 ;;
+      *) pm enable "$P/$c" >/dev/null 2>&1 ;;
+    esac
+  done
   for c in $(dumpsys package "$P" | $BB grep -oE '[A-Za-z0-9_./$]*(HardwareMachineService|SerialPortMC30Service)' | $BB sort -u); do
     case "$c" in
       */*) pm enable "$c" ;;

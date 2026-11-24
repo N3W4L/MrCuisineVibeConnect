@@ -648,6 +648,7 @@ class SettingsScreen(a: MainActivity) : Screen(a) {
             if (problems.isEmpty() && sync.installed()) {
                 if (sync.components().hardwareService != null && !sync.setVendorHardware(false))
                     problems += tr("impossible de couper l'appli d'origine du moteur")
+                sync.setVendorHome(false)
                 sync.forceStop()
             }
             view.post {
@@ -671,6 +672,7 @@ class SettingsScreen(a: MainActivity) : Screen(a) {
                 Thread {
                     val sync = LidlSync(a, a.prefs, a.app.recipes, a.app.log)
                     sync.setVendorHardware(true)
+                    sync.setVendorHome(true)
                     val launch = sync.components().launch
                     view.post {
                         if (launch != null) a.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

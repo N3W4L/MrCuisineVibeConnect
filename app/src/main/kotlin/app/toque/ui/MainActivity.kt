@@ -88,7 +88,7 @@ class MainActivity : Activity() {
         root.background = Ui.background()
         val column = Ui.vertical(this)
         topBar = TopBar(this)
-        column.addView(topBar, Ui.lp(Ui.MATCH, Ui.u(66)))
+        column.addView(topBar, Ui.lp(Ui.MATCH, Ui.u(76)))
         content = FrameLayout(this)
         column.addView(content, Ui.lp(Ui.MATCH, 0, 1f))
         machineBar = MachineBar(this)
@@ -105,6 +105,10 @@ class MainActivity : Activity() {
         applyVolume()
 
         app.machine.connect()
+        // Robot piloté par Toque : l'appli d'origine ne reprend pas l'écran d'accueil d'elle-même.
+        if (prefs.mode == Prefs.Mode.HARDWARE && prefs.bootLaunch && !prefs.vendorSession) Thread {
+            LidlSync(this, prefs, app.recipes, app.log).setVendorHome(false)
+        }.start()
         app.recipes.load()
         SyncService.schedule(this)
         push(HomeScreen(this))
@@ -588,6 +592,7 @@ class MainActivity : Activity() {
             val sync = LidlSync(this, prefs, app.recipes, app.log)
             sync.forceStop()
             sync.setVendorHardware(false)
+            if (prefs.bootLaunch) sync.setVendorHome(false)
             main.post { machine.resumePort() }
             // Base de l'appli d'origine : copiée seulement quand son format est connu (Connect).
             if (!prefs.robot.stockImport) return@Thread
@@ -619,6 +624,7 @@ class MainActivity : Activity() {
                         return@Thread
                     }
                     val sync = LidlSync(this, prefs, app.recipes, app.log)
+                    sync.setVendorHome(true)   // sinon Android n'a pas de quoi la lancer
                     val enabled = sync.setVendorHardware(true)
                     val launch = sync.components().launch
                     main.post {
