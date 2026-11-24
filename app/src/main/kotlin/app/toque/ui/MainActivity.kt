@@ -17,6 +17,7 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import app.toque.Prefs
+import app.toque.core.machine.RootShell
 import app.toque.ToqueApp
 import app.toque.core.i18n.I18n
 import app.toque.core.i18n.tr
@@ -531,6 +532,27 @@ class MainActivity : Activity() {
     }
 
     /** Dialogue de confirmation. */
+    /**
+     * Arrêt propre de la tablette (root) : Android ferme les fichiers avant de s'éteindre, puis on
+     * coupe l'interrupteur arrière. Couper directement l'interrupteur peut abîmer un fichier en
+     * cours d'écriture (réglages, recettes). Refusé pendant un programme.
+     */
+    fun askPowerOff() {
+        if (snapshot.busy) {
+            toast(tr("Arrêtez d'abord le programme en cours"), Ui.WARN)
+            return
+        }
+        confirm(tr("Éteindre le robot ?"),
+            tr("L'écran s'éteint proprement. Coupez ensuite l'interrupteur à l'arrière du robot ; rallumez-le avec ce même interrupteur."),
+            tr("Éteindre"), icon = Icon.Kind.POWER) {
+            toast(tr("Arrêt en cours…"))
+            Thread {
+                val r = RootShell.run("svc power shutdown || reboot -p", 15_000)
+                if (!r.ok) main.post { toast(tr("Arrêt impossible (root ?)"), Ui.WARN) }
+            }.start()
+        }
+    }
+
     fun confirm(title: String, message: String, yes: String, no: String = tr("Annuler"),
                 danger: Boolean = false, icon: Icon.Kind = Icon.Kind.WARNING, onYes: () -> Unit) {
         val card = Ui.card(this, 28f, Ui.SURFACE2)

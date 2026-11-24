@@ -13,7 +13,7 @@ class Icon(context: Context, var kind: Kind, color: Int) : View(context) {
         BACK, SEARCH, PLAY, PAUSE, STOP, THERMO, SPEED, CLOCK, REVERSE, SCALE, BOOK, STAR, STAR_FILLED,
         SETTINGS, PLUS, MINUS, CHECK, CLOSE, KNEAD, STEAM, FLAME, BOLT, SYNC, LID, WARNING, HOME, WHISK,
         CHEVRON, LINK, INFO, POT, TIMER, DROP, EDIT, TRASH, PEOPLE, DOWNLOAD, UPLOAD, GLOBE, BELL, HAND,
-        FORWARD, BLADE,
+        FORWARD, BLADE, POWER,
     }
 
     var color: Int = color
@@ -132,6 +132,11 @@ class Icon(context: Context, var kind: Kind, color: Int) : View(context) {
             Kind.MINUS -> canvas.drawLine(5f, 12f, 19f, 12f, stroke)
             Kind.CHECK -> { p.moveTo(5f, 12.5f); p.lineTo(10f, 17.5f); p.lineTo(19f, 7f); canvas.drawPath(p, stroke) }
             Kind.CLOSE -> { canvas.drawLine(6f, 6f, 18f, 18f, stroke); canvas.drawLine(18f, 6f, 6f, 18f, stroke) }
+            Kind.POWER -> {
+                // Symbole marche/arrêt : un cercle ouvert en haut, traversé par un trait.
+                rect.set(4.5f, 5f, 19.5f, 20f); canvas.drawArc(rect, -55f, 290f, false, stroke)
+                canvas.drawLine(12f, 3f, 12f, 11.5f, stroke)
+            }
             Kind.KNEAD -> {
                 p.moveTo(4f, 15f); p.cubicTo(4f, 9f, 9f, 7f, 12f, 9f); p.cubicTo(15f, 7f, 20f, 9f, 20f, 15f)
                 p.cubicTo(20f, 19f, 4f, 19f, 4f, 15f); p.close(); canvas.drawPath(p, stroke)

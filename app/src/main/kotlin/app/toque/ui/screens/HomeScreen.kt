@@ -80,7 +80,7 @@ class HomeScreen(a: MainActivity) : Screen(a) {
         resumeCard.setPadding(Ui.u(22), Ui.u(16), Ui.u(18), Ui.u(16))
         resumeCard.background = Ui.pressable(Ui.round(Ui.ACCENT_DIM, 24f), 24f)
         resumeCard.addView(Icon(c, Icon.Kind.PLAY, Ui.ACCENT), LinearLayout.LayoutParams(Ui.u(26), Ui.u(26)).apply { rightMargin = Ui.u(14) })
-        resumeText = Ui.ellipsize(Ui.text(c, "", 19f, Ui.TEXT, Ui.MEDIUM), 2)
+        resumeText = Ui.ellipsize(Ui.text(c, "", 19f, Ui.TEXT, Ui.MEDIUM), 1)
         resumeCard.addView(resumeText, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
         // Zone de toucher plus grande que l'icône (au doigt, sur la carte).
         val cancel = android.widget.FrameLayout(c)

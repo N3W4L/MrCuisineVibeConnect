@@ -78,7 +78,8 @@ class TopBar(private val a: MainActivity) : LinearLayout(a) {
         setGravity(Gravity.CENTER_VERTICAL)
         setPadding(Ui.u(10), 0, Ui.u(18), 0)
         // Transparente : le dégradé du fond passe aussi derrière la barre du haut.
-        roundButton(back) { a.back() }
+        // Sur l'accueil, la place du Retour accueille le bouton d'arrêt (Android s'éteint proprement).
+        roundButton(back) { if (atHome) a.askPowerOff() else a.back() }
         addView(back, LayoutParams(Ui.u(72), Ui.u(72)))
         addView(titleView, LayoutParams(0, Ui.WRAP, 1f).apply { leftMargin = Ui.u(6) })
         addView(lid, Ui.lp(Ui.WRAP, Ui.u(56), r = 10))
@@ -122,7 +123,9 @@ class TopBar(private val a: MainActivity) : LinearLayout(a) {
             Ui.chipText(clock).text = MainActivity.now()
             clock.visibility = View.VISIBLE
         }
-        back.visibility = if (canGoBack) View.VISIBLE else View.INVISIBLE
+        back.set(if (canGoBack) Icon.Kind.BACK else Icon.Kind.POWER)
+        back.contentDescription = if (canGoBack) tr("Retour") else tr("Éteindre")
+        back.visibility = View.VISIBLE
         home.visibility = if (canGoBack) View.VISIBLE else View.GONE
     }
 
