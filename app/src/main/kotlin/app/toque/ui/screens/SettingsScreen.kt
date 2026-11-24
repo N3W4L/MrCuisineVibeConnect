@@ -207,6 +207,11 @@ class SettingsScreen(a: MainActivity) : Screen(a) {
         knobCol.addView(dropdown(knob, a.prefs.standbyKnob) { a.prefs.standbyKnob = it }, Ui.lp(Ui.MATCH, Ui.u(56), t = 6))
         screenRow.addView(knobCol, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
         general.addView(screenRow, Ui.lp(t = 12))
+        // Anti-rebond du bouton rotatif : les crans à l'envers au milieu d'un tour sont ignorés.
+        val bounce = listOf("0" to tr("Désactivé"), "120" to tr("Léger"), "180" to tr("Normal"), "300" to tr("Fort"))
+        general.addView(label(tr("Anti-rebond du bouton rotatif"),
+            tr("Le bouton envoie parfois un cran à l'envers au milieu d'un tour. Un cran dans l'autre sens trop rapproché du précédent est ignoré ; après une courte pause, changer de sens marche tout de suite. « Fort » filtre davantage, mais demande une pause plus longue pour repartir dans l'autre sens.")), Ui.lp(t = 12))
+        general.addView(dropdown(bounce, a.prefs.knobReverseMs.toString()) { a.prefs.knobReverseMs = it.toInt() }, Ui.lp(Ui.MATCH, Ui.u(56), t = 6))
         general.addView(label(tr("Date et heure")), Ui.lp(t = 12))
         val zones = listOf(ZoneLookup.AUTO to tr("Automatique (d'après la connexion Internet)")) +
             (ZoneLookup.COMMON + listOf(TimeSync.current(), a.prefs.timeZone))

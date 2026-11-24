@@ -355,7 +355,7 @@ class MainActivity : Activity() {
 
     /**
      * Anti-rebond du bouton rotatif : son encodeur envoie parfois un cran à l'envers au milieu d'un
-     * tour (droite, gauche, droite…). Un cran dans l'autre sens moins de [KNOB_REVERSE_MS] après le
+     * tour (droite, gauche, droite…). Un cran dans l'autre sens moins de Prefs.knobReverseMs après le
      * précédent est ignoré ; après une vraie pause, changer de sens marche tout de suite.
      */
     private var knobDir = 0
@@ -363,7 +363,7 @@ class MainActivity : Activity() {
 
     private fun knobAccepts(dir: Int): Boolean {
         val now = android.os.SystemClock.uptimeMillis()
-        if (knobDir != 0 && dir != knobDir && now - knobAt < KNOB_REVERSE_MS) return false
+        if (knobDir != 0 && dir != knobDir && now - knobAt < prefs.knobReverseMs) return false
         knobDir = dir
         knobAt = now
         return true
@@ -683,8 +683,6 @@ class MainActivity : Activity() {
     }
 
     companion object {
-        /** Délai sous lequel un cran dans l'autre sens est pris pour un rebond (voir knobAccepts). */
-        const val KNOB_REVERSE_MS = 180L
         private var reopenSettings = false
         private const val STORAGE_REQUEST = 7
 

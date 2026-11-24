@@ -317,8 +317,8 @@ class Cockpit(c: Context) : View(c) {
 }
 
 /**
- * Interrupteur à deux choix, les deux noms dans la piste ; une pastille glisse sous le choix actif.
- * Le second choix (inverse, fouet) prend la couleur d'accent : on voit qu'on n'est plus sur l'habituel.
+ * Interrupteur à deux choix, les deux noms dans la piste ; une pastille en couleur d'accent glisse
+ * sous le choix actif, l'autre nom reste neutre.
  */
 class TwoWay(c: Context, private val left: String, private val right: String, private val onChange: (Boolean) -> Unit) : View(c) {
     var on = false
@@ -354,11 +354,12 @@ class TwoWay(c: Context, private val left: String, private val right: String, pr
         val x = inset + (half - inset) * pos
         rect.set(x, inset, x + half - inset, h - inset)
         paint.style = Paint.Style.FILL
-        paint.color = if (on) Ui.ACCENT_DIM else Ui.SURFACE2
+        // Le choix actif est toujours en couleur d'accent (Normal comme Inverse, Lame comme Fouet).
+        paint.color = Ui.ACCENT_DIM
         canvas.drawRoundRect(rect, rad - inset * 0.6f, rad - inset * 0.6f, paint)
         label.textSize = Ui.uf(17f)
         val base = h / 2f - (label.descent() + label.ascent()) / 2f
-        label.color = if (!on) Ui.TEXT else Ui.TEXT2
+        label.color = if (!on) Ui.ACCENT else Ui.TEXT2
         canvas.drawText(left, w / 4f, base, label)
         label.color = if (on) Ui.ACCENT else Ui.TEXT2
         canvas.drawText(right, w * 0.75f, base, label)

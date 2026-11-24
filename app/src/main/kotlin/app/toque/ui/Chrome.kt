@@ -49,13 +49,13 @@ const val ROOM_C = 21
 class TopBar(private val a: MainActivity) : LinearLayout(a) {
     private val back = Icon(a, Icon.Kind.BACK, Ui.TEXT)
     private val titleView = Ui.ellipsize(Ui.text(a, "", 26f, Ui.TEXT, Ui.MEDIUM))
-    // Pastilles de la même hauteur que les boutons Retour et Accueil (66), en grand texte.
-    private val temp = bigChip(Ui.chip(a, "", Icon.Kind.THERMO, Ui.TEXT2, size = 21f))
-    private val lid = bigChip(Ui.chip(a, tr("Couvercle ouvert"), Icon.Kind.LID, Ui.WARN, Ui.WARN_DIM, 21f))
-    private val link = bigChip(Ui.chip(a, "", Icon.Kind.LINK, Ui.TEXT2, size = 21f))
-    private val clock = bigChip(Ui.chip(a, "", Icon.Kind.CLOCK, Ui.TEXT, size = 21f))
+    // Pastilles un peu plus basses que les boutons Retour et Accueil (56 contre 66).
+    private val temp = bigChip(Ui.chip(a, "", Icon.Kind.THERMO, Ui.TEXT2, size = 19f))
+    private val lid = bigChip(Ui.chip(a, tr("Couvercle ouvert"), Icon.Kind.LID, Ui.WARN, Ui.WARN_DIM, 19f))
+    private val link = bigChip(Ui.chip(a, "", Icon.Kind.LINK, Ui.TEXT2, size = 19f))
+    private val clock = bigChip(Ui.chip(a, "", Icon.Kind.CLOCK, Ui.TEXT, size = 19f))
 
-    private fun bigChip(chip: LinearLayout): LinearLayout = chip.apply { setPadding(Ui.u(18), 0, Ui.u(20), 0) }
+    private fun bigChip(chip: LinearLayout): LinearLayout = chip.apply { setPadding(Ui.u(16), 0, Ui.u(18), 0) }
     private val home = Icon(a, Icon.Kind.HOME, Ui.TEXT)
     private val handler = Handler(Looper.getMainLooper())
     private val tick = object : Runnable {
@@ -81,10 +81,10 @@ class TopBar(private val a: MainActivity) : LinearLayout(a) {
         roundButton(back) { a.back() }
         addView(back, LayoutParams(Ui.u(72), Ui.u(72)))
         addView(titleView, LayoutParams(0, Ui.WRAP, 1f).apply { leftMargin = Ui.u(6) })
-        addView(lid, Ui.lp(Ui.WRAP, Ui.u(66), r = 10))
-        addView(temp, Ui.lp(Ui.WRAP, Ui.u(66), r = 10))
-        addView(link, Ui.lp(Ui.WRAP, Ui.u(66), r = 10))
-        addView(clock, Ui.lp(Ui.WRAP, Ui.u(66), r = 10))
+        addView(lid, Ui.lp(Ui.WRAP, Ui.u(56), r = 10))
+        addView(temp, Ui.lp(Ui.WRAP, Ui.u(56), r = 10))
+        addView(link, Ui.lp(Ui.WRAP, Ui.u(56), r = 10))
+        addView(clock, Ui.lp(Ui.WRAP, Ui.u(56), r = 10))
         roundButton(home) { a.home() }
         addView(home, LayoutParams(Ui.u(72), Ui.u(72)))
         lid.visibility = View.GONE

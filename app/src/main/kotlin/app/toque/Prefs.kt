@@ -137,6 +137,13 @@ class Prefs(context: Context) {
             p.edit().putBoolean("sound", v).commit()
         }
 
+    /** Anti-rebond du bouton rotatif (ms) : un cran à l'envers plus rapide est ignoré ; 0 = désactivé. */
+    var knobReverseMs: Int
+        get() = p.getInt("knobReverseMs", 180)
+        set(v) {
+            p.edit().putInt("knobReverseMs", v).commit()
+        }
+
     /** Volume de tous les sons de Toque, de 5 à 100 %. */
     var soundVolume: Int
         get() = p.getInt("soundVolume", 80).coerceIn(5, 100)
