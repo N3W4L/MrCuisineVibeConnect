@@ -44,11 +44,11 @@ class HomeScreen(a: MainActivity) : Screen(a) {
         root.setPadding(Ui.u(28), Ui.u(10), Ui.u(24), Ui.u(24))
 
         val left = Ui.vertical(c)
-        greeting = Ui.text(c, "", 24f, Ui.TEXT2, Ui.LIGHT)
+        greeting = Ui.text(c, "", 32f, Ui.TEXT2, Ui.LIGHT)
         left.addView(greeting, Ui.lp(t = 8))
         clock = Ui.text(c, "", 132f, Ui.TEXT, Ui.THIN)
         left.addView(clock, Ui.lp(t = 2))
-        date = Ui.text(c, "", 22f, Ui.TEXT2, Ui.LIGHT)
+        date = Ui.text(c, "", 28f, Ui.TEXT2, Ui.LIGHT)
         left.addView(date, Ui.lp(t = 2))
 
         // Rappel tant que le bouton rotatif n'est ni réglé ni vu en marche.
