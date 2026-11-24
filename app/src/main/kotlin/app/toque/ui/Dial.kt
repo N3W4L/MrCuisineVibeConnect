@@ -127,8 +127,14 @@ class Dial(c: Context) : FrameLayout(c) {
         for (i in 0 until n) {
             val item = items[i]
             ring.color = if (i == selected) (item.colors?.first ?: Ui.ACCENT) else Ui.TRACK
+            // Thème néon : le secteur choisi en dégradé, comme les boutons.
+            val end = Theme.p.accentEnd
+            ring.shader = if (i == selected && item.colors == null && end != null)
+                android.graphics.LinearGradient(oval.left, oval.top, oval.right, oval.bottom, Ui.ACCENT, end, android.graphics.Shader.TileMode.CLAMP)
+            else null
             // drawArc compte depuis 3 h ; nos angles depuis midi.
             canvas.drawArc(oval, angleOf(i) - 90f - step / 2f + gap / 2f, step - gap, false, ring)
+            ring.shader = null
         }
     }
 

@@ -16,7 +16,8 @@ object Theme {
     enum class Id(val key: String, private val fr: String) {
         GLASS("glass", trKey("Verre liquide")),
         BENTO("bento", trKey("Bento expressif")),
-        WARM("warm", trKey("Minimal chaleureux"));
+        WARM("warm", trKey("Minimal chaleureux")),
+        CYBER("cyber", trKey("Cyberpunk néon"));
 
         val label: String get() = tr(fr)
 
@@ -38,7 +39,7 @@ object Theme {
         }
     }
 
-    enum class Face { SANS, SERIF }
+    enum class Face { SANS, SERIF, MONO }
 
     class Palette(
         val light: Boolean,
@@ -66,8 +67,12 @@ object Theme {
         val display: Face = Face.SANS,
         /** Couleur de fond et d'encre des six tuiles de l'accueil (null = tuile normale). */
         val tiles: List<Pair<Int, Int>?> = emptyList(),
-        /** Deux grandes formes colorées derrière l'interface (verre liquide). */
+        /** Deux grandes formes colorées derrière l'interface (verre liquide, néon). */
         val blobs: IntArray? = null,
+        /** Fin du dégradé des aplats d'accent (boutons, choix, cadran) ; null = accent uni. */
+        val accentEnd: Int? = null,
+        /** Style néon : coins coupés à 45°, contours lumineux, fond en grille avec lignes de balayage. */
+        val cyber: Boolean = false,
     ) {
         val scrim: Int get() = if (light) 0x99000000.toInt() else 0xCC000000.toInt()
         val ripple: Int get() = if (light) 0x1F000000 else 0x33FFFFFF
@@ -139,6 +144,34 @@ object Theme {
         tiles = listOf(c(0xFFC8553D) to c(0xFFFFFFFF), null, null, null, null, null),
     )
 
+    // Néon : rose et bleu électriques sur nuit violette ; chaque aplat d'accent est un dégradé rose → bleu.
+    private val CYBER_DARK = Palette(
+        light = false, bg = c(0xFF0B0A1F), gradient = intArrayOf(c(0xFF160B33), c(0xFF0B0A1F), c(0xFF061430)),
+        surface = c(0xE60D0C22), surface2 = c(0xFF16143A), surface3 = c(0xFF221E4C), stroke = c(0x8829D3FF),
+        text = c(0xFFF4F1FF), text2 = c(0xFFB9B2E6), text3 = c(0xFF7C74B4),
+        accent = c(0xFFFF3EA5), onAccent = c(0xFFFFFFFF), second = c(0xFF2DC6FF),
+        cool = c(0xFF2DC6FF), onCool = c(0xFF001A2E),
+        ok = c(0xFF3DF5C0), warn = c(0xFFFFD34E), danger = c(0xFFFF4D6D), faultBg = c(0xFF3D0E25),
+        display = Face.MONO, accentEnd = c(0xFF2D8CFF), cyber = true,
+        tiles = listOf(
+            c(0xFFFF3EA5) to c(0xFFFFFFFF), c(0xFF8A5CFF) to c(0xFFFFFFFF), c(0xFF2DC6FF) to c(0xFF001A2E),
+            c(0xFFFF7AD9) to c(0xFF2A0020), c(0xFF4D7CFF) to c(0xFFFFFFFF), null,
+        ),
+    )
+    private val CYBER_LIGHT = Palette(
+        light = true, bg = c(0xFFF4F0FF), gradient = intArrayOf(c(0xFFFBF7FF), c(0xFFF4F0FF), c(0xFFEAF1FF)),
+        surface = c(0xF2FFFFFF), surface2 = c(0xFFFBF9FF), surface3 = c(0xFFE7E1FA), stroke = c(0x99E0218A),
+        text = c(0xFF1A1036), text2 = c(0xFF5A4F86), text3 = c(0xFF8A80B4),
+        accent = c(0xFFE0218A), onAccent = c(0xFFFFFFFF), second = c(0xFF1E7BE0),
+        cool = c(0xFF1E7BE0), onCool = c(0xFFFFFFFF),
+        ok = c(0xFF0E8C64), warn = c(0xFFA56A00), danger = c(0xFFD0344F), faultBg = c(0xFFFBE1EC),
+        display = Face.MONO, accentEnd = c(0xFF2D6BFF), cyber = true,
+        tiles = listOf(
+            c(0xFFFF8FCB) to c(0xFF3A0020), c(0xFFC8B4FF) to c(0xFF22105A), c(0xFF9EDCFF) to c(0xFF00304D),
+            c(0xFFFFB6E6) to c(0xFF3A0020), c(0xFFB4C8FF) to c(0xFF0D1F5A), null,
+        ),
+    )
+
     /** Palette en service. Par défaut le bento en sombre. */
     var p: Palette = BENTO_DARK
         private set
@@ -151,6 +184,7 @@ object Theme {
         Id.GLASS -> if (light) GLASS_LIGHT else GLASS_DARK
         Id.BENTO -> if (light) BENTO_LIGHT else BENTO_DARK
         Id.WARM -> if (light) WARM_LIGHT else WARM_DARK
+        Id.CYBER -> if (light) CYBER_LIGHT else CYBER_DARK
     }
 
     /** Heures du mode automatique : clair de [dayStart] h (incluse) à [dayEnd] h (exclue). */
@@ -178,5 +212,6 @@ object Theme {
     fun face(face: Face, fallback: Typeface): Typeface = when (face) {
         Face.SANS -> fallback
         Face.SERIF -> SERIF
+        Face.MONO -> Typeface.MONOSPACE
     }
 }

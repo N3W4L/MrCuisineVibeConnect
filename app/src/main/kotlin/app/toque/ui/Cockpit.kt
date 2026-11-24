@@ -132,7 +132,12 @@ class Cockpit(c: Context) : View(c) {
         if (tempText != null && tempFrac > 0f) canvas.drawArc(oval, TEMP_START, TEMP_SWEEP * tempFrac, false, heatArc)
         if (speedText != null && speedFrac > 0f) {
             arc.color = speedColor
+            // Thème néon : la vitesse passe du rose (bas) au bleu (haut).
+            Theme.p.accentEnd?.let { end ->
+                arc.shader = android.graphics.LinearGradient(0f, cy + r, 0f, cy - r, Ui.ACCENT, end, android.graphics.Shader.TileMode.CLAMP)
+            }
             canvas.drawArc(oval, SPEED_BOTTOM, -TEMP_SWEEP * speedFrac, false, arc)
+            arc.shader = null
         }
 
         // Température réelle du bol : un trait clair en travers de l'arc.
@@ -192,7 +197,7 @@ class Cockpit(c: Context) : View(c) {
         }
     }
 
-    private val speedColor: Int get() = if (Ui.LIGHT_THEME) 0xFF3D7E99.toInt() else 0xFF9FC6D6.toInt()
+    private val speedColor: Int get() = Theme.p.accentEnd ?: if (Ui.LIGHT_THEME) 0xFF3D7E99.toInt() else 0xFF9FC6D6.toInt()
 
     private fun caption(canvas: Canvas, s: String, x: Float, y: Float, align: Paint.Align, on: Boolean) {
         text.textAlign = align

@@ -82,12 +82,18 @@ object Ui {
     fun uf(v: Float): Float = v * scale
 
     fun round(color: Int, radius: Float, strokeColor: Int = 0, strokeWidth: Float = 0f): GradientDrawable =
-        GradientDrawable().apply {
+        if (p.cyber) Chamfer(color, uf(radius), strokeColor, if (strokeWidth > 0) uf(strokeWidth) else 0f)
+        else GradientDrawable().apply {
             // Le rayon avant la couleur : sous Android 6, setCornerRadius ne recalcule pas l'opacité.
             // Dans l'autre ordre, la forme se dit opaque sur tout son rectangle, et l'effet d'appui
             // dont elle est le masque (voir pressable) éclaire un carré au lieu du bouton arrondi.
             setCornerRadius(uf(radius * p.corners))
-            setColor(color)
+            // Thème néon : chaque aplat d'accent devient un dégradé (rose → bleu), partout d'un coup.
+            val end = p.accentEnd
+            if (end != null && color == p.accent) {
+                orientation = GradientDrawable.Orientation.LEFT_RIGHT
+                colors = intArrayOf(color, end)
+            } else setColor(color)
             if (strokeWidth > 0) setStroke(u(strokeWidth), strokeColor)
         }
 
@@ -336,6 +342,7 @@ object Ui {
      */
     fun background(): Drawable {
         val base = GradientDrawable(GradientDrawable.Orientation.TL_BR, p.gradient)
+        if (p.cyber) return CyberBackground(base)
         val blobs = p.blobs ?: return base
         return object : Drawable() {
             // Rien n'est alloué pendant le dessin : deux ovales pleins, calculés quand la taille change.
