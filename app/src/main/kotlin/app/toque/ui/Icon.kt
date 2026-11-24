@@ -94,9 +94,14 @@ class Icon(context: Context, var kind: Kind, color: Int) : View(context) {
                 }
             }
             Kind.SCALE -> {
-                rect.set(3f, 7f, 21f, 20f); canvas.drawRoundRect(rect, 3f, 3f, stroke)
-                rect.set(7f, 10f, 17f, 18f); canvas.drawArc(rect, 200f, 140f, false, stroke)
-                canvas.drawLine(12f, 14f, 14f, 11.5f, stroke); canvas.drawLine(8f, 4f, 16f, 4f, stroke)
+                // Balance à plateaux : socle, colonne, fléau, et deux plateaux suspendus.
+                canvas.drawLine(7f, 20f, 17f, 20f, stroke); canvas.drawLine(12f, 3f, 12f, 20f, stroke)
+                p.moveTo(6f, 6f); p.lineTo(12f, 5f); p.lineTo(18f, 6f)
+                for (x in floatArrayOf(6f, 18f)) {
+                    p.moveTo(x + 3f, 12f); p.lineTo(x, 6f); p.lineTo(x - 3f, 12f)
+                    rect.set(x - 3f, 9f, x + 3f, 15f); p.arcTo(rect, 180f, -180f, false)
+                }
+                canvas.drawPath(p, stroke)
             }
             Kind.BOOK -> {
                 p.moveTo(12f, 6f); p.cubicTo(9f, 4f, 6f, 4f, 3f, 5f); p.lineTo(3f, 19f); p.cubicTo(6f, 18f, 9f, 18f, 12f, 20f)

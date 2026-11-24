@@ -157,6 +157,6 @@ class Dial(c: Context) : FrameLayout(c) {
         /** Épaisseur de l'anneau (part du diamètre) : assez pour viser au doigt, sans alourdir. */
         const val BAND = 0.095f
         /** Taille de l'icône dans son secteur. */
-        const val ICON = 0.62f
+        const val ICON = 0.86f
     }
 }
